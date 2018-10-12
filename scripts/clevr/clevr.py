@@ -4,7 +4,7 @@ Contains CLEVR metadata and minor utilities for working with CLEVR.
 
 from functools import reduce
 
-from nltk.sem.logic import *
+from pyccg.logic import *
 
 
 # CLEVR constants
