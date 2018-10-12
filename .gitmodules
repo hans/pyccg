@@ -1,0 +1,3 @@
+[submodule "nltk"]
+	path = nltk
+	url = git://github.com/nltk/nltk.git
