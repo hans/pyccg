@@ -2,6 +2,7 @@
 Basic example of CCG learning in a CLEVR-like domain.
 """
 
+from pyccg.chart import WeightedCCGChartParser, printCCGDerivation
 from pyccg.model import Model
 from pyccg.lexicon import Lexicon
 from pyccg.logic import TypeSystem, Ontology, Expression
@@ -73,4 +74,17 @@ scene = {
 }
 
 model = Model(scene, ontology)
+print("the ball")
 print(model.evaluate(Expression.fromstring(r"unique(\x.has_shape(x,sphere))")))
+
+
+######
+# Parse an utterance and execute.
+
+parser = WeightedCCGChartParser(lex)
+results = parser.parse("the ball".split())
+printCCGDerivation(results[0])
+
+root_token, _ = results[0].label()
+print(root_token.semantics())
+print(model.evaluate(root_token.semantics()))
