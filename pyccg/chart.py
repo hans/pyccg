@@ -1,14 +1,210 @@
 import itertools
 
 from nltk.ccg import chart as nchart
+from nltk.ccg.combinator import *
+from nltk.parse.chart import AbstractChartRule, Chart, EdgeI
 from nltk.tree import Tree
 import numpy as np
+
+from pyccg.lexicon import Token
+from pyccg.logic import *
 
 
 printCCGDerivation = nchart.printCCGDerivation
 
-DefaultRuleSet = nchart.DefaultRuleSet
-ApplicationRuleSet = nchart.ApplicationRuleSet
+
+# Based on the EdgeI class from NLTK.
+# A number of the properties of the EdgeI interface don't
+# transfer well to CCGs, however.
+class CCGEdge(EdgeI):
+    def __init__(self, span, categ, rule):
+        self._span = span
+        self._categ = categ
+        self._rule = rule
+        self._comparison_key = (span, categ, rule)
+
+    # Accessors
+    def lhs(self): return self._categ
+    def span(self): return self._span
+    def start(self): return self._span[0]
+    def end(self): return self._span[1]
+    def length(self): return self._span[1] - self.span[0]
+    def rhs(self): return ()
+    def dot(self): return 0
+    def is_complete(self): return True
+    def is_incomplete(self): return False
+    def nextsym(self): return None
+
+    def categ(self): return self._categ
+    def rule(self): return self._rule
+
+class CCGLeafEdge(EdgeI):
+    '''
+    Class representing leaf edges in a CCG derivation.
+    '''
+    def __init__(self, pos, token, leaf):
+        self._pos = pos
+        self._token = token
+        self._leaf = leaf
+        self._comparison_key = (pos, token.categ(), leaf)
+
+    # Accessors
+    def lhs(self): return self._token.categ()
+    def span(self): return (self._pos, self._pos+1)
+    def start(self): return self._pos
+    def end(self): return self._pos + 1
+    def length(self): return 1
+    def rhs(self): return self._leaf
+    def dot(self): return 0
+    def is_complete(self): return True
+    def is_incomplete(self): return False
+    def nextsym(self): return None
+
+    def token(self): return self._token
+    def categ(self): return self._token.categ()
+    def leaf(self): return self._leaf
+
+
+class BinaryCombinatorRule(AbstractChartRule):
+    '''
+    Class implementing application of a binary combinator to a chart.
+    Takes the directed combinator to apply.
+    '''
+    NUMEDGES = 2
+    def __init__(self,combinator):
+        self._combinator = combinator
+
+    # Apply a combinator
+    def apply(self, chart, grammar, left_edge, right_edge):
+        # The left & right edges must be touching.
+        if not (left_edge.end() == right_edge.start()):
+            return
+
+        # Check if the two edges are permitted to combine.
+        # If so, generate the corresponding edge.
+        if self._combinator.can_combine(left_edge.categ(),right_edge.categ()):
+            for res in self._combinator.combine(left_edge.categ(), right_edge.categ()):
+                new_edge = CCGEdge(span=(left_edge.start(), right_edge.end()),categ=res,rule=self._combinator)
+                if chart.insert(new_edge,(left_edge,right_edge)):
+                    yield new_edge
+
+    # The representation of the combinator (for printing derivations)
+    def __str__(self):
+        return "%s" % self._combinator
+
+# Type-raising must be handled slightly differently to the other rules, as the
+# resulting rules only span a single edge, rather than both edges.
+class ForwardTypeRaiseRule(AbstractChartRule):
+    '''
+    Class for applying forward type raising
+    '''
+    NUMEDGES = 2
+
+    def __init__(self):
+       self._combinator = ForwardT
+    def apply(self, chart, grammar, left_edge, right_edge):
+        if not (left_edge.end() == right_edge.start()):
+            return
+
+        for res in self._combinator.combine(left_edge.categ(), right_edge.categ()):
+            new_edge = CCGEdge(span=left_edge.span(),categ=res,rule=self._combinator)
+            if chart.insert(new_edge,(left_edge,)):
+                yield new_edge
+
+    def __str__(self):
+        return "%s" % self._combinator
+
+class BackwardTypeRaiseRule(AbstractChartRule):
+    '''
+    Class for applying backward type raising.
+    '''
+    NUMEDGES = 2
+
+    def __init__(self):
+       self._combinator = BackwardT
+    def apply(self, chart, grammar, left_edge, right_edge):
+        if not (left_edge.end() == right_edge.start()):
+            return
+
+        for res in self._combinator.combine(left_edge.categ(), right_edge.categ()):
+            new_edge = CCGEdge(span=right_edge.span(),categ=res,rule=self._combinator)
+            if chart.insert(new_edge,(right_edge,)):
+                yield new_edge
+
+    def __str__(self):
+        return "%s" % self._combinator
+
+
+# Common sets of combinators used for English derivations.
+ApplicationRuleSet = [BinaryCombinatorRule(ForwardApplication),
+                        BinaryCombinatorRule(BackwardApplication)]
+CompositionRuleSet = [BinaryCombinatorRule(ForwardComposition),
+                        BinaryCombinatorRule(BackwardComposition),
+                        BinaryCombinatorRule(BackwardBx)]
+SubstitutionRuleSet = [BinaryCombinatorRule(ForwardSubstitution),
+                        BinaryCombinatorRule(BackwardSx)]
+TypeRaiseRuleSet = [ForwardTypeRaiseRule(), BackwardTypeRaiseRule()]
+
+# The standard English rule set.
+DefaultRuleSet = ApplicationRuleSet + CompositionRuleSet + \
+                    SubstitutionRuleSet + TypeRaiseRuleSet
+
+
+class CCGChart(Chart):
+  def __init__(self, tokens):
+    Chart.__init__(self, tokens)
+
+  # Constructs the trees for a given parse. Unfortnunately, the parse trees need to be
+  # constructed slightly differently to those in the default Chart class, so it has to
+  # be reimplemented
+  def _trees(self, edge, complete, memo, tree_class):
+    assert complete, "CCGChart cannot build incomplete trees"
+
+    if edge in memo:
+      return memo[edge]
+
+    if isinstance(edge,CCGLeafEdge):
+      word = tree_class(edge.token(), [self._tokens[edge.start()]])
+      leaf = tree_class((edge.token(), "Leaf"), [word])
+      memo[edge] = [leaf]
+      return [leaf]
+
+    memo[edge] = []
+    trees = []
+
+    for cpl in self.child_pointer_lists(edge):
+      child_choices = [self._trees(cp, complete, memo, tree_class)
+                       for cp in cpl]
+      for children in itertools.product(*child_choices):
+        lhs = (Token(self._tokens[edge.start():edge.end()], edge.lhs(), compute_semantics(children, edge)), str(edge.rule()))
+        trees.append(tree_class(lhs, children))
+
+    memo[edge] = trees
+    return trees
+
+
+def compute_semantics(children, edge):
+  if children[0].label()[0].semantics() is None:
+    return None
+
+  if len(children) is 2:
+    if isinstance(edge.rule(), BackwardCombinator):
+      children = [children[1],children[0]]
+
+    combinator = edge.rule()._combinator
+    function = children[0].label()[0].semantics()
+    argument = children[1].label()[0].semantics()
+
+    if isinstance(combinator, UndirectedFunctionApplication):
+      return compute_function_semantics(function, argument)
+    elif isinstance(combinator, UndirectedComposition):
+      return compute_composition_semantics(function, argument)
+    elif isinstance(combinator, UndirectedSubstitution):
+      return compute_substitution_semantics(function, argument)
+    else:
+      raise AssertionError('Unsupported combinator \'' + combinator + '\'')
+  else:
+    return compute_type_raised_semantics(children[0].label()[0].semantics())
 
 
 class WeightedCCGChartParser(nchart.CCGChartParser):
@@ -77,7 +273,7 @@ class WeightedCCGChartParser(nchart.CCGChartParser):
 
     # Collect potential leaf edges for each index. May be multiple per
     # token.
-    edge_cands = [[nchart.CCGLeafEdge(i, l_token, token) for l_token in lex.categories(token)]
+    edge_cands = [[CCGLeafEdge(i, l_token, token) for l_token in lex.categories(token)]
                    for i, token in enumerate(tokens)]
 
     # Run a parse for each of the product of possible leaf nodes,
@@ -85,7 +281,7 @@ class WeightedCCGChartParser(nchart.CCGChartParser):
     results = []
     used_edges = []
     for edge_sequence in itertools.product(*edge_cands):
-      chart = nchart.CCGChart(list(tokens))
+      chart = CCGChart(list(tokens))
       for leaf_edge in edge_sequence:
         chart.insert(leaf_edge, ())
 

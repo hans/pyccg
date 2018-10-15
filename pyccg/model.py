@@ -150,7 +150,6 @@ class Model(object):
     # If expr is a propositional letter 'p', 'q', etc, it could be in valuation.symbols
     # and also be an IndividualVariableExpression. We want to catch this first case.
     # So there is a procedural consequence to the ordering of clauses here:
-    print(expr.variable.__class__, self.ontology.constants)
     if expr.variable.name in self.ontology.functions_dict:
       return self.ontology.functions_dict[expr.variable.name].defn
     elif isinstance(expr, IndividualVariableExpression):

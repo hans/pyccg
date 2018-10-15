@@ -13,13 +13,12 @@ import sys
 
 from nltk.ccg import lexicon as ccg_lexicon
 from nltk.ccg.api import PrimitiveCategory, FunctionalCategory, AbstractCCGCategory
-from nltk.sem import logic as l
 import numpy as np
 
 from pyccg import chart
 from pyccg.combinator import category_search_replace, \
     type_raised_category_search_replace
-from pyccg.logic import get_arity
+from pyccg import logic as l
 from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue
 
 
@@ -259,7 +258,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     for category, entries in entries_by_categ.items():
       if get_yield(category) == self._start:
         rooted_cats.add(category)
-      ret[category] = set(get_arity(entry.semantics()) for entry in entries)
+      ret[category] = set(l.get_arity(entry.semantics()) for entry in entries)
 
     if soft_propagate_roots:
       derived_root_cats = self._derived_categories_by_base[self._start]
