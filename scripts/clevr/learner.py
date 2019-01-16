@@ -73,8 +73,6 @@ scene = {
   ]
 }
 
-# from IPython import embed; embed()
-
 model = Model(scene, ontology)
 print("the ball")
 print(model.evaluate(Expression.fromstring(r"unique(\x.has_shape(x,sphere))")))
