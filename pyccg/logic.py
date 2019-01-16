@@ -2520,7 +2520,7 @@ def compute_type_raised_semantics(semantics):
   return LambdaExpression(var, semantics)
 
 def compute_function_semantics(function, argument):
-  print(function, argument, type(function), type(argument))
+  # print(function, argument, type(function), type(argument))
   return ApplicationExpression(function, argument).simplify()
 
 def compute_composition_semantics(function, argument):

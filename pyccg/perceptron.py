@@ -89,7 +89,7 @@ def update_perceptron_distant(lexicon, sentence, model, answer,
     if not correct_results:
       raise ValueError("No parses derived have the correct answer.")
     elif not incorrect_results:
-      L.warning("No incorrect parses. Skipping update.")
+      L.info("No incorrect parses. Skipping update.")
       return weighted_results, 0.0
 
   # Sort results by descending parse score.

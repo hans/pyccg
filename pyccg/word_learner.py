@@ -107,7 +107,7 @@ class WordLearner(object):
         alpha=self.bootstrap_alpha)
     return query_token_syntaxes, candidates
 
-  def update_with_example(self, sentence, model, answer):
+  def update_with_example(self, sentence, model, answer, verbose=True):
     """
     Observe a new `sentence -> answer` pair in the context of some `model` and
     update learner weights.
@@ -126,14 +126,16 @@ class WordLearner(object):
           self.lexicon, sentence, model, answer,
           learning_rate=self.learning_rate)
     except ValueError as e:
-      # No parse succeeded -- attempt lexical induction.
-      L.warning("Parse failed for sentence '%s'", " ".join(sentence))
-      L.warning(e)
+      if verbose:
+        # No parse succeeded -- attempt lexical induction.
+        L.warning("Parse failed for sentence '%s'", " ".join(sentence))
+        L.warning(e)
 
       # Find tokens for which we need to insert lexical entries.
       query_tokens, query_token_syntaxes = \
           self.prepare_lexical_induction(sentence)
-      L.info("Inducing new lexical entries for words: %s", ", ".join(query_tokens))
+      if verbose:
+        L.info("Inducing new lexical entries for words: %s", ", ".join(query_tokens))
 
       # Augment the lexicon with all entries for novel words which yield the
       # correct answer to the sentence under some parse. Restrict the search by
@@ -147,7 +149,8 @@ class WordLearner(object):
           negative_samples=self.negative_samples,
           total_negative_mass=self.total_negative_mass)
 
-      self.lexicon.debug_print()
+      if verbose:
+        self.lexicon.debug_print()
 
       # Attempt a new parameter update.
       weighted_results, _ = update_perceptron_distant(
@@ -155,6 +158,7 @@ class WordLearner(object):
           learning_rate=self.learning_rate)
 
     prune_count = self.lexicon.prune()
-    L.info("Pruned %i entries from lexicon.", prune_count)
+    if verbose:
+      L.info("Pruned %i entries from lexicon.", prune_count)
 
     return weighted_results
