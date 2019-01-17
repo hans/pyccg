@@ -6,6 +6,7 @@ from pyccg.chart import WeightedCCGChartParser, printCCGDerivation
 from pyccg.model import Model
 from pyccg.lexicon import Lexicon
 from pyccg.logic import TypeSystem, Ontology, Expression
+from pyccg.word_learner import WordLearner
 
 
 ########
@@ -58,7 +59,6 @@ lex = Lexicon.fromstring(r"""
 
   the => N/N {\x.unique(x)}
   ball => N {\x.has_shape(x,sphere)}
-  cubic => N/N {\x.has_shape(x,cube)}
 """, ontology, include_semantics=True)
 
 
@@ -77,12 +77,14 @@ model = Model(scene, ontology)
 print("the ball")
 print(model.evaluate(Expression.fromstring(r"unique(\x.has_shape(x,sphere))")))
 
-
 ######
 # Parse an utterance and execute.
 
-parser = WeightedCCGChartParser(lex)
-results = parser.parse("the ball".split())
+learner = WordLearner(lex)
+learner.update_with_example("the cube".split(), model, scene['objects'][1])
+
+parser = WeightedCCGChartParser(learner.lexicon)
+results = parser.parse("the cube".split())
 printCCGDerivation(results[0])
 
 root_token, _ = results[0].label()

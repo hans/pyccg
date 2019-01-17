@@ -583,6 +583,7 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
 
   category_prior = lex.observed_category_distribution(
       exclude_tokens=set(tokens), soft_propagate_roots=True)
+
   if smooth is not None:
     L.debug("Smoothing category prior with k = %g", smooth)
     for key in category_prior.keys():
@@ -732,6 +733,9 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
     sentence: Sentence which we are attempting to parse.
   """
 
+  get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
+          or get_semantic_arity
+
   # Prepare dummy variable which will be inserted into parse checks.
   sub_target = dummy_var or l.Variable("F000")
   sub_expr = l.FunctionVariableExpression(sub_target)
@@ -797,6 +801,10 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
     category_parse_results: TODO
     dummy_var: TODO
   """
+
+  get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
+          or get_semantic_arity
+
   # Prepare for syntactic bootstrap: pre-calculate distributions over semantic
   # form elements conditioned on syntactic category.
   lf_ngrams = lex.lf_ngrams_mixed(alpha=alpha, order=1,
