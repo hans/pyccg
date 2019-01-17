@@ -145,12 +145,12 @@ def learn_dataset(initial_lex, dataset_size):
 
 lex = learn_dataset(initial_lex, 1000)
 
-print('Learned lexicon')
+print('Learned lexicon:')
 print('-' * 120)
 lex.debug_print()
 print()
 
-print('Examplar parsing')
+print('Example:')
 print('-' * 120)
 parser = WeightedCCGChartParser(lex)
 results = parser.parse("any cube".split())
