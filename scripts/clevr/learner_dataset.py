@@ -130,7 +130,7 @@ def learn_dataset(initial_lex, dataset_size):
         for v, q, a in dataset:
             yield (Model(v, ontology), q.split(), a)
 
-    learner = WordLearner(initial_lex)
+    learner = WordLearner(initial_lex, update_perceptron_version=2)
     try:
         for v, q, a in iter_data():
             learner.update_with_example(q, v, a, verbose=False)
