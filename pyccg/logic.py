@@ -1856,8 +1856,15 @@ class TypeSystem(object):
   def __init__(self, primitive_types):
     assert "?" not in primitive_types, "Cannot override ANY_TYPE name"
     assert "v" not in primitive_types, "Cannot override EVENT_TYPE name"
-    self._types = {primitive_type_name: BasicType(ENTITY_TYPE)
-                   for primitive_type_name in primitive_types}
+    self._types = {}
+
+    for primitive_type in primitive_types:
+        if isinstance(primitive_type, str):
+            self._types[primitive_type] = BasicType(primitive_type)
+        else:
+            assert isinstance(primitive_type, BasicType)
+            self._types[primitive_type.name] = primitive_type
+
     self._types["?"] = self.ANY_TYPE
     self._types["v"] = self.EVENT_TYPE
 
@@ -2114,6 +2121,7 @@ class Ontology(object):
 
     self.add_functions(functions)
     self.constants = constants
+    self.constants_dict = {const.name: const for const in self.constants}
 
     self._prepare()
 
@@ -2132,16 +2140,17 @@ class Ontology(object):
       else:
         new_functions.append(function)
 
-    self.functions.extend(functions)
+    self.functions.extend(new_functions)
     self.functions_dict.update({fn.name: fn for fn in functions})
 
     for function in functions:
       # We can't statically verify the type of the definition, but we can at
       # least verify the arity.
-      L.debug("verifying arity: %s stated %i actual %i (%s)",
-              function.name, function.arity, self.get_expr_arity(function.defn),
-              function.defn)
-      assert function.arity == self.get_expr_arity(function.defn), function.name
+      if function.defn is not None:
+        L.debug("verifying arity: %s stated %i actual %i (%s)",
+                function.name, function.arity, self.get_expr_arity(function.defn),
+                function.defn)
+        assert function.arity == self.get_expr_arity(function.defn), function.name
 
   def _prepare(self):
     self._nltk_type_signature = self._make_nltk_type_signature()
