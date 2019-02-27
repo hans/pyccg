@@ -18,6 +18,11 @@ class Model(object):
     self.ontology = ontology
     self.domain = deepcopy(scene["objects"])
 
+  def __str__(self):
+    return "%s<%s>" % (self.__class__.__name__, self.scene.name or id(self))
+
+  __repr__ = __str__
+
   def evaluate(self, expr):
     try:
       return self.satisfy(expr)

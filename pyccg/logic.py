@@ -1850,19 +1850,20 @@ def is_eventvar(expr):
 
 class TypeSystem(object):
 
-  ANY_TYPE = ANY_TYPE
-  EVENT_TYPE = EVENT_TYPE
+  ANY_TYPE = l.ANY_TYPE
+  EVENT_TYPE = l.EVENT_TYPE
 
   def __init__(self, primitive_types):
     assert "?" not in primitive_types, "Cannot override ANY_TYPE name"
     assert "v" not in primitive_types, "Cannot override EVENT_TYPE name"
-    self._types = {primitive_type_name: BasicType(ENTITY_TYPE)
+    self._types = {primitive_type_name: l.BasicType(name=primitive_type_name,
+                                                    parent=l.ENTITY_TYPE)
                    for primitive_type_name in primitive_types}
     self._types["?"] = self.ANY_TYPE
     self._types["v"] = self.EVENT_TYPE
 
   def __getitem__(self, type_expr):
-    if isinstance(type_expr, Type):
+    if isinstance(type_expr, l.Type):
       return type_expr
     if isinstance(type_expr, str):
       return self._types[type_expr]
@@ -1874,7 +1875,7 @@ class TypeSystem(object):
   def make_function_type(self, type_expr):
     ret = self[type_expr[-1]]
     for type_expr_i in type_expr[:-1][::-1]:
-      ret = ComplexType(self[type_expr_i], ret)
+      ret = l.ComplexType(self[type_expr_i], ret)
     return ret
 
   def new_function(self, name, type, defn, **kwargs):
@@ -2142,6 +2143,10 @@ class Ontology(object):
               function.name, function.arity, self.get_expr_arity(function.defn),
               function.defn)
       assert function.arity == self.get_expr_arity(function.defn), function.name
+
+  def add_constants(self, constants):
+    self.constants = constants
+    self.constants_dict = {c.name: c for c in constants}
 
   def _prepare(self):
     self._nltk_type_signature = self._make_nltk_type_signature()
