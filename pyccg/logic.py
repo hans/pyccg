@@ -1168,7 +1168,7 @@ class ApplicationExpression(Expression):
         try:
             # print("====", self.function, self.argument, self.argument.type)
             self.function._set_type(ComplexType(self.argument.type, other_type), signature)
-        except TypeResolutionException:
+        except l.TypeResolutionException:
             raise TypeException(
                     "The function '%s' is of type '%s' and cannot be applied "
                     "to '%s' of type '%s'.  Its argument must match type '%s'."
@@ -1331,7 +1331,7 @@ class AbstractVariableExpression(Expression):
         for varEx in signature[self.variable.name]:
             resolution = varEx.type.resolve(resolution)
             if not resolution:
-                raise InconsistentTypeHierarchyException(self)
+                raise l.InconsistentTypeHierarchyException(self)
 
         signature[self.variable.name].append(self)
         for varEx in signature[self.variable.name]:
@@ -1389,7 +1389,7 @@ class IndividualVariableExpression(AbstractVariableExpression):
                     raise RuntimeError("Missing declared variable type for %s" % self.variable)
 
         if not other_type.matches(self.variable.type):
-            raise TypeResolutionException(self.variable.type, other_type)
+            raise l.TypeResolutionException(self.variable.type, other_type)
         # if not other_type.matches(ENTITY_TYPE):
         #     raise IllegalTypeException(self, other_type, ENTITY_TYPE)
 
@@ -1450,7 +1450,7 @@ class ConstantExpression(AbstractVariableExpression):
             resolution = varEx.type.resolve(resolution)
             # print("\t\t", resolution)
             if not resolution:
-                raise InconsistentTypeHierarchyException(self)
+                raise l.InconsistentTypeHierarchyException(self)
 
         signature[self.variable.name].append(self)
         for varEx in signature[self.variable.name]:
@@ -1591,7 +1591,7 @@ class LambdaExpression(VariableBinderExpression):
 
         self.term._set_type(other_type.second, signature)
         if not self.type.resolve(other_type):
-            raise TypeResolutionException(self, other_type)
+            raise l.TypeResolutionException(self, other_type)
 
     def __str__(self):
         variables = [self.variable]
@@ -1893,6 +1893,47 @@ class TypeSystem(object):
     return Variable(name, type)
 
 
+class ConstantSystem(object):
+  def __init__(self, constants):
+    self.constants = constants
+    self.constants_dict = {const.name: const for const in self.constants}
+    self._used = {const.name: False for const in self.constants}
+    self._iter_new_constants_buffer = None
+
+  def mark_used(self, constant):
+    assert constant.name in self._used, 'unregistered constant: {}'.format(constant)
+    self._used[constant.name] = True
+
+  def mark_used_expressions(self, expressions):
+    for expr in expressions:
+      for c in expr.constants():
+        self.mark_used(c)
+
+  def override_used_expressions(self, expressions):
+    # clean the "used constants" buffer.
+    self._used = {const.name: False for const in self.constants}
+    self.mark_used_expressions(expressions)
+
+  def make_new_constant(self, type_request=None, newly_used_constants_expr=None):
+    unused = [
+      name for name, v in self._used.items() if (
+        (not v) and
+        (newly_used_constants_expr is None or name not in newly_used_constants_expr) and
+        (type_request is None or self.constants_dict[name].type.matches(type_request))
+      )
+    ]
+    if len(unused) == 0:
+      raise ValueError('cannot find unused constants of type: {}'.format(str(type_request)))
+    return self.constants_dict[unused[0]]
+
+  def iter_new_constants(self, type_request=None, newly_used_constants_expr=None):
+    if newly_used_constants_expr is not None:
+      for name in newly_used_constants_expr:
+        if type_request is None or self.constants_dict[name].type.matches(type_request):
+          yield self.constants_dict[name]
+    yield self.make_new_constant(type_request=type_request, newly_used_constants_expr=newly_used_constants_expr)
+
+
 # Wrapper for a typed function.
 class Function(object):
   """
@@ -2120,10 +2161,16 @@ class Ontology(object):
     self.variable_weight = variable_weight
 
     self.add_functions(functions)
-    self.constants = constants
-    self.constants_dict = {const.name: const for const in self.constants}
-
+    self.constant_system = ConstantSystem(constants)
     self._prepare()
+
+  @property
+  def constants(self):
+    return self.constant_system.constants
+
+  @property
+  def constants_dict(self):
+    return self.constant_system.constants_dict
 
   EXPR_TYPES = [ApplicationExpression, ConstantExpression,
                 IndividualVariableExpression, LambdaExpression,
@@ -2173,7 +2220,8 @@ class Ontology(object):
 
   @listify
   def _iter_expressions_inner(self, max_depth, bound_vars,
-                              type_request=None, function_weights=None):
+                              type_request=None, function_weights=None,
+                              use_unused_constants=False, newly_used_constants_expr=None):
     """
     Enumerate all legal expressions.
 
@@ -2187,6 +2235,9 @@ class Ontology(object):
         strong.
       function_weights: Override for function weights to determine the order in
         which we consider proposing function application expressions.
+      use_unused_constants: If true, always use unused constants.
+      newly_used_constants_expr: If not None, a set of constants (by name),
+        all newly used constants for the current expression.
     """
     if max_depth == 0:
       return
@@ -2224,15 +2275,29 @@ class Ontology(object):
             else:
               # print("\t" * (6 - max_depth), fn, fn.arg_types)
               sub_args = []
-              for i, arg_type_request in enumerate(fn.arg_types):
-                # print("\t" * (6 - max_depth + 1), "ARGUMENT %i %s (max_depth %i)" % (i, arg_type_request, max_depth - 1))
-                sub_args.append(
-                    self._iter_expressions_inner(max_depth=max_depth - 1,
-                                                bound_vars=bound_vars,
-                                                type_request=arg_type_request,
-                                                function_weights=function_weights))
 
-              for arg_combs in itertools.product(*sub_args):
+              all_arg_type_requests = list(fn.arg_types)
+
+              def product_sub_args(i, ret, nuce):
+                if i >= len(all_arg_type_requests):
+                  yield ret
+                  return
+
+                arg_type_request = all_arg_type_requests[i]
+                results = self._iter_expressions_inner(max_depth=max_depth - 1,
+                                                       bound_vars=bound_vars,
+                                                       type_request=arg_type_request,
+                                                       function_weights=function_weights,
+                                                       use_unused_constants=use_unused_constants,
+                                                       newly_used_constants_expr=nuce)
+                for expr in results:
+                  if nuce is None:
+                    new_nuce = {c.name for c in expr.constants()}
+                  else:
+                    new_nuce = nuce | {c.name for c in expr.constants()}
+                  yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
+
+              for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
                 candidate = make_application(fn.name, arg_combs)
                 valid = self._valid_application_expr(candidate)
                 # print("\t" * (6 - max_depth + 1), "valid %s? %s" % (candidate, valid))
@@ -2274,10 +2339,13 @@ class Ontology(object):
               else:
                 subexpr_type_request = self.types.make_function_type(subexpr_type_request)
 
+            # TODO(Jiayuan Mao @ 02/26): can I just pass down the `newly_used_constants_expr`?
             results = self._iter_expressions_inner(max_depth=max_depth - 1,
-                                                    bound_vars=subexpr_bound_vars,
-                                                    type_request=subexpr_type_request,
-                                                    function_weights=function_weights)
+                                                   bound_vars=subexpr_bound_vars,
+                                                   type_request=subexpr_type_request,
+                                                   function_weights=function_weights,
+                                                   use_unused_constants=use_unused_constants,
+                                                   newly_used_constants_expr=newly_used_constants_expr)
             for expr in results:
               candidate = LambdaExpression(bound_var, expr)
               valid = self._valid_lambda_expr(candidate, bound_vars)
@@ -2303,11 +2371,22 @@ class Ontology(object):
 
           yield IndividualVariableExpression(bound_var)
       elif expr_type == ConstantExpression:
-        for constant in self.constants:
-          if type_request is not None and not constant.type.matches(type_request):
-            continue
+        if use_unused_constants:
+          try:
+            for constant in self.constant_system.iter_new_constants(
+                type_request=type_request,
+                newly_used_constants_expr=newly_used_constants_expr
+            ):
 
-          yield ConstantExpression(constant)
+              yield ConstantExpression(constant)
+          except ValueError:
+            pass
+        else:
+          for constant in self.constants:
+            if type_request is not None and not constant.type.matches(type_request):
+              continue
+
+            yield ConstantExpression(constant)
       elif expr_type == FunctionVariableExpression:
         # NB we don't support enumerating bound variables with function types
         # right now -- the following only considers yielding fixed functions
@@ -2329,6 +2408,12 @@ class Ontology(object):
       type_signature.update(extra_type_signature)
 
     expr.typecheck(signature=type_signature)
+
+  def register_expressions(self, expressions):
+    self.constant_system.mark_used_expressions(expressions)
+
+  def override_registered_expressions(self, expressions):
+    self.constant_system.override_used_expressions(expressions)
 
   def infer_type(self, expr, variable_name, extra_types=None):
     """
@@ -2544,3 +2629,4 @@ def compute_substitution_semantics(function, argument):
   new_term = ApplicationExpression(function.term, new_argument).simplify()
 
   return LambdaExpression(function.variable, new_term)
+
