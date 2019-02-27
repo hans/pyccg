@@ -2509,7 +2509,7 @@ class Ontology(object):
 
 
 def compute_type_raised_semantics(semantics):
-  core = deepcopy(semantics)
+  core = copy.deepcopy(semantics)
   parent = None
   while isinstance(core, LambdaExpression):
     parent = core

@@ -658,6 +658,9 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
     sentence: Sentence which we are attempting to parse.
   """
 
+  get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
+      or get_semantic_arity
+
   # Prepare dummy variable which will be inserted into parse checks.
   sub_target = dummy_var or l.Variable("F000")
   sub_expr = l.FunctionVariableExpression(sub_target)
@@ -853,7 +856,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
   # Enumerate expressions just once! We'll bias the search over the enumerated
   # forms later.
-  max_depth = 4
+  max_depth = 3
   if cache_candidate_exprs:
     candidate_exprs = getattr(predict_zero_shot, "candidate_exprs", None)
     if candidate_exprs is None:
