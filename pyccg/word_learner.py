@@ -17,7 +17,7 @@ L = logging.getLogger(__name__)
 
 class WordLearner(object):
 
-  def __init__(self, lexicon, compressor, bootstrap=True,
+  def __init__(self, lexicon, bootstrap=True,
                learning_rate=10.0, beta=3.0, negative_samples=5,
                total_negative_mass=0.1, syntax_prior_smooth=1e-3,
                meaning_prior_smooth=1e-3, bootstrap_alpha=0.25,
@@ -27,11 +27,9 @@ class WordLearner(object):
     """
     Args:
       lexicon:
-      compressor:
       bootstrap: If `True`, enable syntactic bootstrapping.
     """
     self.lexicon = lexicon
-    self.compressor = compressor
 
     self.bootstrap = bootstrap
 
@@ -56,51 +54,6 @@ class WordLearner(object):
     Construct a CCG parser from the current learner state.
     """
     return chart.WeightedCCGChartParser(self.lexicon, ruleset=ruleset)
-
-  def compress_lexicon(self):
-    if self.compressor is None:
-      return
-
-    try:
-      # Run EC compression on the entries of the induced lexicon. This may create
-      # new inventions, updating both the `ontology` and the provided `lex`.
-      new_lex, affected_entries = self.compressor.make_inventions(self.lexicon)
-    except Exception as e:
-      L.error("Compression failed: %s", e)
-      return
-
-    # Create derived categories following new inventions.
-    to_propagate = []
-    for invention_name, tokens in affected_entries.items():
-      if invention_name in new_lex._derived_categories_by_source:
-        # TODO merge possibly new tokens with existing invention token groups
-        continue
-
-      affected_syntaxes = set(t.categ() for t in tokens)
-      if len(affected_syntaxes) == 1:
-        # Just one syntax is involved. Create a new derived category.
-        L.debug("Creating new derived category for tokens %r", tokens)
-
-        derived_name = new_lex.add_derived_category(tokens, source_name=invention_name)
-        to_propagate.append((derived_name, next(iter(affected_syntaxes))))
-
-
-    # Propagate derived categories, beginning with the largest functional
-    # categories. The ordering allows us to support hard-propagating both e.g.
-    # a new root category and a new argument category at the same time.
-    #
-    # (We may have derived new categories for entries with types `PP/NP` and # `S/NP/PP` -- in this case, we want to first make available a new category
-    # `D0{S}/NP/PP` such that we can propagate the derived `D1{PP}` onto it,
-    # yielding `D0{S}/NP/D1{PP}`.)
-    to_propagate = sorted(
-        to_propagate, key=lambda proposal: get_semantic_arity(proposal[1]),
-        reverse=True)
-    for derived_cat, base in to_propagate:
-      new_lex.propagate_derived_category(derived_cat)
-      cat_obj, _ = new_lex._derived_categories[derived_cat]
-      L.info("Propagated derived category %s (source %s)", cat_obj, cat_obj.source_name)
-
-    self.lexicon = new_lex
 
   def prepare_lexical_induction(self, sentence):
     """
@@ -301,9 +254,6 @@ class WordLearner(object):
       self.lexicon = self.do_lexical_induction(sentence, model, augment_lexicon_fn,
                                                **augment_lexicon_args)
       self.lexicon.debug_print()
-
-      # Compress the resulting lexicon.
-      self.compress_lexicon()
 
       # Attempt a new parameter update.
       try:
