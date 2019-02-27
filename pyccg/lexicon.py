@@ -19,7 +19,8 @@ from pyccg import chart
 from pyccg.combinator import category_search_replace, \
     type_raised_category_search_replace
 from pyccg import logic as l
-from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue
+from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue, \
+    NoParsesError
 
 
 L = logging.getLogger(__name__)
@@ -842,6 +843,9 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       token. Values are a weighted list of sentence parse results.
     dummy_var: TODO
   """
+
+  get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
+      or get_semantic_arity
 
   # We will restrict semantic arities based on the observed arities available
   # for each category. Pre-calculate the necessary associations.

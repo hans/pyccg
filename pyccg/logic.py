@@ -2114,7 +2114,7 @@ class Ontology(object):
     self.variable_weight = variable_weight
 
     self.add_functions(functions)
-    self.constants = constants
+    self.add_constants(constants)
 
     self._prepare()
 
@@ -2402,6 +2402,9 @@ class Ontology(object):
     elif isinstance(expr, (FunctionVariableExpression, ConstantExpression)) \
         and expr.variable.name in self.functions_dict:
       return self.functions_dict[expr.variable.name].arity
+    elif isinstance(expr, ConstantExpression) \
+        and expr.variable.name in self.constants_dict:
+      return 0
     elif isinstance(expr, IndividualVariableExpression):
       return 0
     elif callable(expr):

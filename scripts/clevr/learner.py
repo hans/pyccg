@@ -81,9 +81,11 @@ print(model.evaluate(Expression.fromstring(r"unique(\x.has_shape(x,sphere))")))
 # Parse an utterance and execute.
 
 learner = WordLearner(lex)
-learner.update_with_example("the cube".split(), model, scene['objects'][1])
 
-parser = WeightedCCGChartParser(learner.lexicon)
+# Update with distant supervision.
+learner.update_with_distant("the cube".split(), model, scene['objects'][1])
+
+parser = learner.make_parser()
 results = parser.parse("the cube".split())
 printCCGDerivation(results[0])
 

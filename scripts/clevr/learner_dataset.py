@@ -60,6 +60,7 @@ constants = [
   types.new_constant("sphere", "shape"),
   types.new_constant("cube", "shape"),
   types.new_constant("cylinder", "shape"),
+  types.new_constant("true", "boolean"),
 ]
 
 ontology = Ontology(types, functions, constants)
@@ -74,7 +75,7 @@ initial_lex = Lexicon.fromstring(r"""
   :- S, N
 
   any => S/N {\x.object_exists(x)}
-  _dummy_noun => N {\x. True}
+  _dummy_noun => N {\x.true}
 """, ontology, include_semantics=True)
 
 
@@ -133,7 +134,7 @@ def learn_dataset(initial_lex, dataset_size):
     learner = WordLearner(initial_lex)
     try:
         for v, q, a in iter_data():
-            learner.update_with_example(q, v, a, verbose=False)
+            learner.update_with_distant(q, v, a)
     except Exception as e:
         print(e)
         raise e
