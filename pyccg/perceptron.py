@@ -125,8 +125,8 @@ def update_perceptron_distant(lexicon, sentence, model, answer,
   return weighted_results, norm
 
 
-def update_perceptron_distant_v2(lexicon, sentence, model, answer,
-                                 learning_rate=10, parser=None):
+def update_perceptron_distant_reinforce(lexicon, sentence, model, answer,
+                                        learning_rate=10, parser=None):
   if parser is None:
     parser = chart.WeightedCCGChartParser(lexicon,
                                           ruleset=chart.DefaultRuleSet)

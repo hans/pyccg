@@ -2,7 +2,6 @@ import logging
 
 from pyccg.lexicon import augment_lexicon_distant, predict_zero_shot, \
     get_candidate_categories, get_semantic_arity
-from pyccg.perceptron import update_perceptron_distant, update_perceptron_distant_v2
 
 
 L = logging.getLogger(__name__)
@@ -14,7 +13,7 @@ class WordLearner(object):
                learning_rate=10.0, beta=3.0, negative_samples=5,
                total_negative_mass=0.1, syntax_prior_smooth=1e-3,
                meaning_prior_smooth=1e-3, bootstrap_alpha=0.25,
-               update_perceptron_version=1):
+               update_perceptron_algo='margin'):
 
     """
     Args:
@@ -35,12 +34,14 @@ class WordLearner(object):
     self.meaning_prior_smooth = meaning_prior_smooth
     self.bootstrap_alpha = bootstrap_alpha
 
-    if update_perceptron_version == 1:
+    if update_perceptron_algo == 'margin':
+      from pyccg.perceptron import update_perceptron_distant
       self.update_perceptron_distant = update_perceptron_distant
-    elif update_perceptron_version == 2:
-      self.update_perceptron_distant = update_perceptron_distant_v2
+    elif update_perceptron_algo == 'reinforce':
+      from pyccg.perceptron import update_perceptron_distant_reinforce
+      self.update_perceptron_distant = update_perceptron_distant_reinforce
     else:
-      raise ValueError('Unknown update_perceptron version: {}.'.format(update_perceptron_version))
+      raise ValueError('Unknown update_perceptron algorithm: {}.'.format(update_perceptron_algo))
 
   @property
   def ontology(self):
