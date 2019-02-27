@@ -44,6 +44,7 @@ def _make_simple_mock_ontology():
       types.new_function("and_", ("boolean", "boolean", "boolean"), lambda x, y: x and y),
       types.new_function("foo", ("obj", "boolean"), lambda x: True),
       types.new_function("bar", ("obj", "boolean"), lambda x: True),
+      types.new_function("not_", ("boolean", "boolean"), lambda x: not x),
 
       types.new_function("invented_1", (("obj", "boolean"), "obj", "boolean"), lambda f, x: x is not None and f(x)),
 
@@ -86,16 +87,18 @@ def test_iter_expressions():
   from pprint import pprint
 
   cases = [
-    (4, "Reuse of bound variable", (r"\z1.and_(foo(z1),bar(z1))",)),
+    (4, "Reuse of bound variable", (r"\z1.and_(foo(z1),bar(z1))",), ()),
     (3, "Support passing functions as arguments to higher-order functions",
-     (r"\z1.invented_1(foo,z1)",)),
+     (r"\z1.invented_1(foo,z1)",), ()),
     (3, "Consider both argument orders",
-     (r"\z1 z2.and_(z1,z2)", r"\z2 z1.and_(z1,z2)")),
+     (r"\z1 z2.and_(z1,z2)", r"\z2 z1.and_(z1,z2)"), ()),
     (3, "Consider both argument orders for three-place function",
-     (r"\z1 z2.threeplace(z1,z2,baz)", r"\z2 z1.threeplace(z1,z2,baz)")),
+     (r"\z1 z2.threeplace(z1,z2,baz)", r"\z2 z1.threeplace(z1,z2,baz)"), ()),
+    (3, "Enforce type constraints on higher-order functions",
+     (), (r"\z1.invented_1(not_,z1)")),
   ]
 
-  def do_case(max_depth, msg, assert_in):
+  def do_case(max_depth, msg, assert_in, assert_not_in):
     expressions = set(ontology.iter_expressions(max_depth=max_depth))
     expression_strs = list(map(str, expressions))
 
@@ -103,8 +106,8 @@ def test_iter_expressions():
     pprint(list(zip(assert_in, present)))
     ok_(all(present), msg)
 
-  for max_depth, msg, assert_in in cases:
-    yield do_case, max_depth, msg, assert_in
+  for max_depth, msg, assert_in, assert_not_in in cases:
+    yield do_case, max_depth, msg, assert_in, assert_not_in
 
 
 def test_as_ec_sexpr():

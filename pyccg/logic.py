@@ -1850,20 +1850,20 @@ def is_eventvar(expr):
 
 class TypeSystem(object):
 
-  ANY_TYPE = l.ANY_TYPE
-  EVENT_TYPE = l.EVENT_TYPE
+  ANY_TYPE = ANY_TYPE
+  EVENT_TYPE = EVENT_TYPE
 
   def __init__(self, primitive_types):
     assert "?" not in primitive_types, "Cannot override ANY_TYPE name"
     assert "v" not in primitive_types, "Cannot override EVENT_TYPE name"
-    self._types = {primitive_type_name: l.BasicType(name=primitive_type_name,
-                                                    parent=l.ENTITY_TYPE)
+    self._types = {primitive_type_name: BasicType(name=primitive_type_name,
+                                                  parent=ENTITY_TYPE)
                    for primitive_type_name in primitive_types}
     self._types["?"] = self.ANY_TYPE
     self._types["v"] = self.EVENT_TYPE
 
   def __getitem__(self, type_expr):
-    if isinstance(type_expr, l.Type):
+    if isinstance(type_expr, Type):
       return type_expr
     if isinstance(type_expr, str):
       return self._types[type_expr]
@@ -1875,7 +1875,7 @@ class TypeSystem(object):
   def make_function_type(self, type_expr):
     ret = self[type_expr[-1]]
     for type_expr_i in type_expr[:-1][::-1]:
-      ret = l.ComplexType(self[type_expr_i], ret)
+      ret = ComplexType(self[type_expr_i], ret)
     return ret
 
   def new_function(self, name, type, defn, **kwargs):
@@ -2286,7 +2286,7 @@ class Ontology(object):
                 try:
                   # TODO make sure variable names are unique before this happens
                   self.typecheck(candidate, extra_types)
-                except l.InconsistentTypeHierarchyException:
+                except InconsistentTypeHierarchyException:
                   pass
                 else:
                   yield candidate
