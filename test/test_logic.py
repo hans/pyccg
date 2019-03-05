@@ -49,7 +49,7 @@ def _make_simple_mock_ontology():
 
       types.new_function("threeplace", ("obj", "obj", "boolean", "boolean"), lambda x, y, o: True),
   ]
-  constants = [types.new_constant("baz", "boolean")]
+  constants = [types.new_constant("baz", "boolean"), types.new_constant("qux", "obj")]
 
   ontology = Ontology(types, functions, constants, variable_weight=0.1)
   return ontology
@@ -100,11 +100,21 @@ def test_iter_expressions():
     expression_strs = list(map(str, expressions))
 
     present = [expr in expression_strs for expr in assert_in]
-    pprint(list(zip(assert_in, present)))
     ok_(all(present), msg)
 
   for max_depth, msg, assert_in in cases:
     yield do_case, max_depth, msg, assert_in
+
+
+def test_iter_expressions_with_used_constants():
+  ontology = _make_simple_mock_ontology()
+
+  ontology.register_expressions([Expression.fromstring(r"\z1.and_(foo(z1),baz)")])
+  expressions = set(ontology.iter_expressions(max_depth=3, use_unused_constants=True))
+  expression_strs = list(map(str, expressions))
+
+  ok_(r"foo(qux)" in expression_strs, "Use of new constant variable")
+  ok_(r"baz" not in expression_strs, "Cannot use used constant variable")
 
 
 def test_as_ec_sexpr():
