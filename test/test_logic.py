@@ -87,7 +87,7 @@ def test_iter_expressions():
   from pprint import pprint
 
   cases = [
-    (4, "Reuse of bound variable", (r"\z1.and_(foo(z1),bar(z1))",), ()),
+    (3, "Reuse of bound variable", (r"\z1.and_(z1,z1)",), ()),
     (3, "Support passing functions as arguments to higher-order functions",
      (r"\z1.invented_1(foo,z1)",), ()),
     (3, "Consider both argument orders",
