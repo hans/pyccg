@@ -56,6 +56,13 @@ def _make_simple_mock_ontology():
   return ontology
 
 
+class test_type_match():
+  ont = _make_simple_mock_ontology()
+
+  ok_(not ont.constants_dict["baz"].type.matches(ont.constants_dict["qux"].type),
+      "'boolean' and 'obj' types should not match")
+
+
 def test_get_expr_arity():
   ont = _make_simple_mock_ontology()
 

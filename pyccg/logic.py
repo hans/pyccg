@@ -1860,8 +1860,7 @@ class TypeSystem(object):
 
     for primitive_type in primitive_types:
         if isinstance(primitive_type, str):
-            self._types[primitive_type] = BasicType(name=primitive_type,
-                                                    parent=ENTITY_TYPE)
+            self._types[primitive_type] = BasicType(name=primitive_type)
         else:
             assert isinstance(primitive_type, BasicType)
             self._types[primitive_type.name] = primitive_type
