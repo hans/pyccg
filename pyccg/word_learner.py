@@ -21,9 +21,9 @@ class WordLearner(object):
                learning_rate=10.0, beta=3.0, negative_samples=5,
                total_negative_mass=0.1, syntax_prior_smooth=1e-3,
                meaning_prior_smooth=1e-3, bootstrap_alpha=0.25,
+               update_perceptron_algo="perceptron",
                prune_entries=3, zero_shot_limit=5,
                limit_induction=False):
-
     """
     Args:
       lexicon:
@@ -44,6 +44,10 @@ class WordLearner(object):
     self.prune_entries = prune_entries
     self.zero_shot_limit = zero_shot_limit
     self.limit_induction = limit_induction
+    
+    if update_perceptron_algo not in ["perceptron", "reinforce"]:
+      raise ValueError('Unknown update_perceptron algorithm: {}.'.format(update_perceptron_algo))
+    self.update_perceptron_algo = update_perceptron_algo
 
   @property
   def ontology(self):
@@ -239,7 +243,10 @@ class WordLearner(object):
     """
 
     augment_lexicon_args = augment_lexicon_args or {}
-    update_perceptron_args = update_perceptron_args or {}
+    
+    base_update_perceptron_args = {"update_method": self.update_perceptron_algo}
+    base_update_perceptron_args.update(update_perceptron_args or {})
+    update_perceptron_args = base_update_perceptron_args
 
     try:
       weighted_results, _ = update_perceptron_fn(

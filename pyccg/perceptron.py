@@ -7,7 +7,7 @@ import logging
 import numpy as np
 
 from pyccg import chart
-from pyccg.util import NoParsesError
+from pyccg.util import softmax, NoParsesError
 
 L = logging.getLogger(__name__)
 
@@ -55,7 +55,8 @@ def update_perceptron_batch(lexicon, data, learning_rate=0.1, parser=None):
 
 
 def update_perceptron(lexicon, sentence, model, success_fn,
-                      learning_rate=10, parser=None):
+                      learning_rate=10, parser=None,
+                      update_method="perceptron"):
   if parser is None:
     parser = chart.WeightedCCGChartParser(lexicon,
                                           ruleset=chart.DefaultRuleSet)
@@ -69,7 +70,9 @@ def update_perceptron(lexicon, sentence, model, success_fn,
   correct_results, incorrect_results = [], []
 
   for result, score, _ in weighted_results:
-    if success_fn(result, model):
+    success, answer_score = success_fn(result, model)
+    if success:
+      score += answer_score
       if score > max_score:
         max_score = score
         correct_results = [(score, result)]
@@ -89,8 +92,12 @@ def update_perceptron(lexicon, sentence, model, success_fn,
     return weighted_results, 0.0
 
   # Sort results by descending parse score.
-  correct_results = sorted(correct_results, key=lambda r: r[0], reverse=True)[:1]
-  incorrect_results = sorted(incorrect_results, key=lambda r: r[0], reverse=True)[:1]
+  correct_results = sorted(correct_results, key=lambda r: r[0], reverse=True)
+  incorrect_results = sorted(incorrect_results, key=lambda r: r[0], reverse=True)
+  
+  if update_method == "perceptron":
+    correct_results = correct_results[:1]
+    incorrect_results = incorrect_results[:1]
 
   # TODO margin?
 
@@ -103,12 +110,18 @@ def update_perceptron(lexicon, sentence, model, success_fn,
   observed_leaf_sequences = set()
   for results, delta in zip([correct_results, incorrect_results],
                              [positive_mass, -negative_mass]):
-    for _, result in results:
+    parse_results = [r[1] for r in results]
+    if update_method == "reinforce":
+	    parse_scores = delta * softmax(np.array([r[0] for r in results]))
+    else:
+      parse_scores = delta
+      
+    for score_delta, result in zip(parse_scores, parse_results):
       leaf_seq = tuple(leaf_token for _, leaf_token in result.pos())
       if leaf_seq not in observed_leaf_sequences:
         observed_leaf_sequences.add(leaf_seq)
         for leaf_token in leaf_seq:
-          token_deltas[leaf_token] += delta
+          token_deltas[leaf_token] += score_delta
 
   for token, delta in token_deltas.items():
     delta *= learning_rate
@@ -126,7 +139,12 @@ def update_perceptron_distant(lexicon, sentence, model, answer,
     root_token, _ = parse_result.label()
 
     try:
-      pred_answer = model.evaluate(root_token.semantics())
+      if hasattr(model, "evaluate_and_score"):
+        pred_answer, answer_score = model.evaluate_and_score(root_token.semantics(), answer)
+      else:
+        pred_answer = model.evaluate(root_token.semantics())
+        answer_score = 0.0
+      
       success = pred_answer == answer
     except (TypeError, AttributeError) as e:
       # Type inconsistency. TODO catch this in the iter_expression
@@ -136,7 +154,7 @@ def update_perceptron_distant(lexicon, sentence, model, answer,
       # Precondition of semantics failed to pass.
       success = False
 
-    return success
+    return success, answer_score
 
   L.debug("Desired answer: %s", answer)
   return update_perceptron(lexicon, sentence, model, success_fn,
@@ -154,7 +172,7 @@ def update_perceptron_cross_situational(lexicon, sentence, model,
     except:
       success = False
 
-    return success
+    return success, 0.0
 
   return update_perceptron(lexicon, sentence, model, success_fn,
                            **update_perceptron_kwargs)
@@ -176,7 +194,7 @@ def update_perceptron_2afc(lexicon, sentence, models,
     except:
       model2_success = False
 
-    return model1_success or model2_success
+    return (model1_success or model2_success), 0.0
 
   return update_perceptron(lexicon, sentence, models, success_fn,
                            **update_perceptron_kwargs)

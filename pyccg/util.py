@@ -198,3 +198,12 @@ class UniquePriorityQueue(PriorityQueue):
 
     ret = ret.normalize()
     return ret
+
+
+def softmax(arr, axis=-1):
+    assert axis == -1
+    arr = arr - arr.max(axis=axis)
+    arr = np.exp(arr)
+    arr /= arr.sum(axis=axis, keepdims=True)
+    return arr
+
