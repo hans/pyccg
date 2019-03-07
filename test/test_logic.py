@@ -95,15 +95,19 @@ def test_iter_expressions():
     (3, "Consider both argument orders for three-place function",
      (r"\z1 z2.threeplace(z1,z2,baz)", r"\z2 z1.threeplace(z1,z2,baz)"), ()),
     (3, "Enforce type constraints on higher-order functions",
-     (), (r"\z1.invented_1(not_,z1)")),
+     (), (r"\z1.invented_1(not_,z1)",)),
+    (3, "Enforce type constraints on constants",
+     (), (r"\z1.and_(z1,qux)",)),
   ]
 
   def do_case(max_depth, msg, assert_in, assert_not_in):
     expressions = set(ontology.iter_expressions(max_depth=max_depth))
-    expression_strs = list(map(str, expressions))
+    expression_strs = sorted(map(str, expressions))
 
-    present = [expr in expression_strs for expr in assert_in]
-    ok_(all(present), msg)
+    for expr in assert_in:
+      ok_(expr in expression_strs, "%s: should contain %s" % (msg, expr))
+    for expr in assert_not_in:
+      ok_(expr not in expression_strs, "%s: should not contain %s" % (msg, expr))
 
   for max_depth, msg, assert_in, assert_not_in in cases:
     yield do_case, max_depth, msg, assert_in, assert_not_in
