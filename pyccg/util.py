@@ -4,7 +4,19 @@ import heapq
 import itertools
 from queue import PriorityQueue
 
+import matplotlib
+matplotlib.use("Agg")
+from matplotlib import pyplot as plt
 import numpy as np
+
+
+class NoParsesError(Exception):
+  """
+  No parses were computed for the given sentence.
+  """
+  def __init__(self, message, sentence):
+    super().__init__(message)
+    self.sentence = sentence
 
 
 class Distribution(Counter):
@@ -18,6 +30,17 @@ class Distribution(Counter):
     for key in support:
       ret[key] = 1 / len(support)
     return ret
+
+  @property
+  def support(self):
+    return self.keys()
+
+  def ensure_support(self, keys):
+    for key in keys:
+      if key not in self:
+        self[key] = 0.
+
+    return self
 
   def __mul__(self, scale):
     assert isinstance(scale, (int, float))
@@ -44,9 +67,10 @@ class Distribution(Counter):
 
   def normalize(self):
     Z = sum(self.values())
-    if Z > 0:
+    if Z != 0:
       return self * (1 / Z)
-    return self
+    elif Z == 0:
+      return Distribution.uniform(self.keys())
 
   def mix(self, other, alpha=0.5):
     assert alpha >= 0 and alpha <= 1
@@ -54,6 +78,36 @@ class Distribution(Counter):
 
   def argmax(self):
     return max(self, key=lambda k: self[k])
+
+  def plot(self, name, out_dir, k=5, xlabel=None, title=None, save_csv=True):
+    """
+    Save a bar plot of the distribution.
+    """
+    support = sorted(self.keys(), key=lambda k: distribution[k], reverse=True)
+
+    if save_csv:
+      with (out_dir / ("%s.csv" % name)).open("w") as csv_f:
+        for key in support:
+          csv_f.write("%s,%f\n" % (key, self[key]))
+
+    # Trim support for plot.
+    if k is not None:
+      support = support[:k]
+
+    xs = np.arange(len(support))
+    fig = plt.figure(figsize=(10, 8))
+    plt.bar(xs, [self[support] for support in support])
+    plt.xticks(xs, list(map(str, support)), rotation="vertical")
+    plt.ylabel("Probability mass")
+    if xlabel is not None:
+      plt.xlabel(xlabel)
+    if title is not None:
+      plt.title(title)
+
+    plt.tight_layout()
+
+    path = out_dir / ("%s.png" % name)
+    fig.savefig(path)
 
 
 class ConditionalDistribution(object):

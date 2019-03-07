@@ -19,7 +19,8 @@ from pyccg import chart
 from pyccg.combinator import category_search_replace, \
     type_raised_category_search_replace
 from pyccg import logic as l
-from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue
+from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue, \
+    NoParsesError
 
 
 L = logging.getLogger(__name__)
@@ -54,19 +55,21 @@ COMMENTS_RE = re.compile('''([^#]*)(?:#.*)?''')
 
 class Lexicon(ccg_lexicon.CCGLexicon):
 
-  def __init__(self, start, primitives, families, entries, ontology=None):
+  def __init__(self, starts, primitives, families, entries, ontology=None):
     """
     Create a new Lexicon.
 
     Args:
-      start: Start symbol. All valid parses must have a root node of this
-        category.
+      start: Start symbol(s). All valid parses must have a root node of this
+        category. Either a string (single start) or a sequence (multiple
+        allowed starts).
       primitives:
       families:
       entries: Lexical entries. Dict mapping from word strings to lists of
         `Token`s.
     """
-    self._start = ccg_lexicon.PrimitiveCategory(start)
+    starts = [starts] if isinstance(starts, str) else starts
+    self._starts = [ccg_lexicon.PrimitiveCategory(start) for start in starts]
     self._primitives = primitives
     self._families = families
     self._entries = entries
@@ -84,7 +87,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     Convert string representation into a lexicon for CCGs.
     """
     ccg_lexicon.CCGVar.reset_id()
-    primitives = []
+    primitives, starts = [], []
     families = {}
     entries = defaultdict(list)
     for line in lex_str.splitlines():
@@ -98,6 +101,11 @@ class Lexicon(ccg_lexicon.CCGLexicon):
         # The first one is the target category
         # ie, :- S, N, NP, VP
         primitives = primitives + [prim.strip() for prim in line[2:].strip().split(',')]
+
+        # But allow multiple target categories separated by a colon in the first element:
+        # ie, :- S:N,NP,VP
+        starts = primitives[0].split(":")
+        primitives = starts + primitives[1:]
       else:
         # Either a family definition, or a word definition
         (ident, sep, rhs) = LEX_RE.match(line).groups()
@@ -115,14 +123,14 @@ class Lexicon(ccg_lexicon.CCGLexicon):
             if semantics_str is None:
               raise AssertionError(line + " must contain semantics because include_semantics is set to True")
             else:
-              semantics = l.Expression.fromstring(SEMANTICS_RE.match(semantics_str).groups()[0])
+              semantics = l.Expression.fromstring(ccg_lexicon.SEMANTICS_RE.match(semantics_str).groups()[0])
 
           weight = float(weight[1:-1]) if weight is not None else default_weight
 
           # Word definition
           # ie, which => (N\N)/(S/NP)
           entries[ident].append(Token(ident, cat, semantics, weight=weight))
-    return cls(primitives[0], primitives, families, entries,
+    return cls(starts, primitives, families, entries,
                ontology=ontology)
 
   def clone(self, retain_semantics=True):
@@ -138,7 +146,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
     return ret
 
-  def prune(self, min_weight=0.0):
+  def prune(self, max_entries=3):
     """
     Prune low-weight entries from the lexicon in-place.
 
@@ -150,10 +158,10 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     """
     prune_count = 0
     for token in self._entries:
-      entries_t = self._entries[token]
-      self._entries[token] = [entry for entry in entries_t
-                              if entry.weight() >= min_weight]
-      prune_count += len(entries_t) - len(self._entries[token])
+      entries_t = [token for token in self._entries[token] if token.weight() > 0]
+      entries_t = sorted(entries_t, key=lambda t: t.weight())[:max_entries]
+      prune_count += len(self._entries[token]) - len(entries_t)
+      self._entries[token] = entries_t
 
     return prune_count
 
@@ -203,16 +211,16 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       if token in exclude_tokens:
         continue
       for entry in entries:
-        if get_yield(entry.categ()) == self._start:
-          rooted_cats.add(entry.categ())
+        c_yield = get_yield(entry.categ())
+        if c_yield in self._starts:
+          rooted_cats.add((c_yield, entry.categ()))
 
         if entry.weight() > 0.0:
           ret[entry.categ()] += entry.weight()
 
     if soft_propagate_roots:
-      derived_root_cats = self._derived_categories_by_base[self._start]
-      for rooted_cat in rooted_cats:
-        for derived_root_cat in derived_root_cats:
+      for c_yield, rooted_cat in rooted_cats:
+        for derived_root_cat in self._derived_categories_by_base[c_yield]:
           soft_prop_cat = set_yield(rooted_cat, derived_root_cat)
           # Ensure key exists.
           ret.setdefault(soft_prop_cat, 0.0)
@@ -233,7 +241,9 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     """
     Return primitive categories which are valid root nodes.
     """
-    return [self._start] + list(self._derived_categories_by_base[self._start])
+    return self._starts + \
+        list(itertools.chain.from_iterable(self._derived_categories_by_base[start]
+                                           for start in self._starts))
 
   def start(self):
     raise NotImplementedError("use #start_categories instead.")
@@ -256,14 +266,13 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     ret = {}
     rooted_cats = set()
     for category, entries in entries_by_categ.items():
-      if get_yield(category) == self._start:
-        rooted_cats.add(category)
-      ret[category] = set(l.get_arity(entry.semantics()) for entry in entries)
+      if get_yield(category) in self._starts:
+        rooted_cats.add((get_yield(category), category))
+      ret[category] = set(get_arity(entry.semantics()) for entry in entries)
 
     if soft_propagate_roots:
-      derived_root_cats = self._derived_categories_by_base[self._start]
-      for rooted_cat in rooted_cats:
-        for derived_root_cat in derived_root_cats:
+      for c_yield, rooted_cat in rooted_cats:
+        for derived_root_cat in self._derived_categories_by_base[c_yield]:
           new_syn = set_yield(rooted_cat, derived_root_cat)
           ret.setdefault(new_syn, ret[rooted_cat])
 
@@ -405,11 +414,10 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     lf_support = lf_syntax_ngrams.support
 
     # Soft-propagate derived root categories.
-    derived_root_cats = self._derived_categories_by_base[self._start]
     for syntax in list(lf_syntax_ngrams.dists.keys()):
       syn_yield = get_yield(syntax)
-      if syn_yield == self._start:
-        for derived_root_cat in derived_root_cats:
+      if syn_yield in self._starts:
+        for derived_root_cat in self._derived_categories_by_base[syn_yield]:
           new_yield = set_yield(syntax, derived_root_cat)
           if new_yield not in lf_syntax_ngrams:
             lf_syntax_ngrams[new_yield] = Distribution.uniform(lf_support)
@@ -583,7 +591,6 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
 
   category_prior = lex.observed_category_distribution(
       exclude_tokens=set(tokens), soft_propagate_roots=True)
-
   if smooth is not None:
     L.debug("Smoothing category prior with k = %g", smooth)
     for key in category_prior.keys():
@@ -636,91 +643,9 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
   return cat_dists
 
 
-def augment_lexicon(old_lex, sentence, lf):
-  """
-  Augment an existing lexicon to cover the elements present in a new
-  sentence--logical form pair.
-
-  This is the first step of the standard "GENLEX" routine.
-  Will create an explosion of possible word-meaning pairs. Many of these
-  form-meaning pairs won't be valid -- i.e., they won't combine with other
-  elements of the lexicon in any way to yield the original parse `lf`.
-
-  Args:
-    lexicon: CCGLexicon
-    sentence: list of string tokens
-    lf: LF string
-  Returns:
-    A modified deep copy of `lexicon`.
-  """
-
-  new_lex = old_lex.clone()
-
-  lf_cands = lf_parts(lf)
-  for word in sentence:
-    if not new_lex.categories(word):
-      for category in old_lex.primitive_categories:
-        for lf_cand in lf_cands:
-          if not is_compatible(category, lf_cand):
-            # Arities of syntactic form and semantic form do not match.
-            continue
-
-          new_token = Token(word, category, lf_cand, 1.0)
-          new_lex._entries[word].append(new_token)
-
-  return new_lex
-
-
-def augment_lexicon_scene(old_lex, sentence, scene):
-  """
-  Augment a lexicon to cover the words in a new sentence uttered in some
-  scene context.
-
-  Args:
-    old_lex: CCGLexicon
-    sentence: list of word tokens
-    scene: CLEVR scene
-  """
-
-  # Build a "minimal" clone of the given lexicon which tracks only
-  # syntax. This minimal lexicon will be used to impose syntactic
-  # constraints and prune the candidates for new words.
-  old_lex_minimal = old_lex.clone(retain_semantics=False)
-  minimal_parser = chart.WeightedCCGChartParser(old_lex_minimal)
-
-  # Target lexicon to be returned.
-  lex = old_lex.clone()
-
-  lf_cands = scene_candidate_referents(scene)
-
-  for word in sentence:
-    if not lex.categories(word):
-      for category in lex.primitive_categories:
-        # Run a test syntactic parse to determine whether this word can
-        # plausibly have this syntactic category under the grammar rules.
-        #
-        # TODO: It could be the case that a single word appears multiple times
-        # in a sentence and has different syntactic interpretations among
-        # those instances. This pruning would fail, causing that
-        # sentence to have zero valid interpretations.
-        minimal_token = Token(word, category)
-        old_lex_minimal._entries[word].append(minimal_token)
-        results = minimal_parser.parse(sentence)
-        if not results:
-          # Syntactically invalid candidate.
-          continue
-
-        for lf_cand in lf_cands:
-          if not is_compatible(category, lf_cand):
-            continue
-          new_token = Token(word, category, lf_cand, 1.0)
-          lex._entries[word].append(new_token)
-
-  return lex
-
-
 def attempt_candidate_parse(lexicon, token, candidate_category,
-                            candidate_expressions, sentence, dummy_var=None):
+                            candidate_expressions, sentence, dummy_var=None,
+                            allow_composition=True):
   """
   Attempt to parse a sentence, mapping `token` to a new candidate lexical
   entry.
@@ -734,7 +659,7 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
   """
 
   get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
-          or get_semantic_arity
+      or get_semantic_arity
 
   # Prepare dummy variable which will be inserted into parse checks.
   sub_target = dummy_var or l.Variable("F000")
@@ -747,7 +672,7 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
   # First attempt a parse with only function application rules.
   results = chart.WeightedCCGChartParser(lexicon, ruleset=chart.ApplicationRuleSet) \
       .parse(sentence)
-  if results:
+  if results or not allow_composition:
     lexicon._entries[token] = []
     return results, sub_target
 
@@ -779,8 +704,122 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
   return results, sub_target
 
 
+def build_bootstrap_likelihood(lex, sentence, ontology,
+                               alpha=0.25, meaning_prior_smooth=1e-3):
+  """
+  Prepare a likelihood function `p(meaning | syntax, sentence)` based on
+  syntactic bootstrapping.
+
+  Args:
+    lex:
+    sentence:
+    ontology:
+    alpha: Mixing parameter for bootstrapping distributions. See `alpha`
+      parameter of `Lexicon.lf_ngrams_mixed`.
+
+  Returns:
+    likelihood_fn: A likelihood function to be used with `predict_zero_shot`.
+  """
+  # Prepare for syntactic bootstrap: pre-calculate distributions over semantic
+  # form elements conditioned on syntactic category.
+  lf_ngrams = lex.lf_ngrams_mixed(alpha=alpha, order=1,
+                                  smooth=meaning_prior_smooth)
+  for category in lf_ngrams:
+    # Redistribute UNK probability uniformly across predicates not observed for
+    # this category.
+    unk_lf_prob = lf_ngrams[category].pop(None)
+    unobserved_preds = set(f.name for f in ontology.functions) - set(lf_ngrams[category].keys())
+    lf_ngrams[category].update({pred: unk_lf_prob / len(unobserved_preds)
+                                for pred in unobserved_preds})
+
+    L.info("% 20s %s", category,
+           ", ".join("%.03f %s" % (prob, pred) for pred, prob
+                     in sorted(lf_ngrams[category].items(), key=lambda x: x[1], reverse=True)))
+
+  def likelihood_fn(token, category, expr, sentence_parse, model):
+    # Retrieve relevant bootstrap distribution p(meaning | syntax).
+    cat_lf_ngrams = lf_ngrams[category]
+    likelihood = 0.0
+    for predicate in expr.predicates():
+      if predicate.name in cat_lf_ngrams:
+        likelihood += np.log(cat_lf_ngrams[predicate.name])
+
+    return likelihood
+
+  return likelihood_fn
+
+
+def likelihood_scene(token, category, expr, sentence_parse, model):
+  """
+  0-1 likelihood function, 1 when a sentence is true of the model and false
+  otherwise.
+
+  Args:
+    token:
+    category:
+    expr:
+    sentence_parses:
+    model:
+
+  Returns:
+    log_likelihood:
+  """
+  try:
+    return 0. if model.evaluate(sentence_parse) == True else -np.inf
+  except:
+    return -np.inf
+
+
+def build_distant_likelihood(answer):
+  """
+  Prepare a likelihood function `p(meaning | syntax, sentence)` based on
+  distant supervision.
+
+  Args:
+    answer: ground-truth answer
+
+  Returns:
+    likelihood_fn: A likelihood function to be used with `predict_zero_shot`.
+  """
+  def likelihood_fn(token, category, expr, sentence_parse, model):
+    try:
+      success = model.evaluate(sentence_parse) == answer
+    except:
+      success = None
+
+    return 0.0 if success == True else -np.inf
+
+  return likelihood_fn
+
+
+def likelihood_2afc(token, category, expr, sentence_parse, models):
+  """
+  0-1 likelihood function for the 2AFC paradigm, where an uttered
+  sentence is known to be true of at least one of two scenes.
+
+  Args:
+    models:
+
+  Returns:
+    log_likelihood:
+  """
+  model1, model2 = models
+  try:
+    model1_success = model1.evaluate(sentence_parse) == True
+  except:
+    model1_success = None
+  try:
+    model2_success = model2.evaluate(sentence_parse) == True
+  except:
+    model2_success = None
+
+  return 0. if model1_success or model2_success else -np.inf
+
+
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
-                      bootstrap=True, meaning_prior_smooth=1e-3, alpha=0.25):
+                      model, likelihood_fns,
+                      meaning_prior_smooth=1e-3, alpha=0.25, queue_limit=5,
+                      cache_candidate_exprs=True):
   """
   Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
   for each of `tokens`.
@@ -791,24 +830,25 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
     candidate_syntaxes:
     sentence:
     ontology:
-    bootstrap: If `True`, use syntactic category information to bootstrap
-      predictions about meanings.
-    alpha: Mixing parameter for bootstrapping distributions. See `alpha`
-      parameter of `Lexicon.lf_ngrams_mixed`.
+    model:
+    likelihood_fns: Collection of likelihood functions `p(meaning | syntax,
+      sentence, model)` used to score candidate meaning--syntax pairs for a
+      word.  Function should accept arguments `(token, candidate_category,
+      candidate_meaning, candidate_semantic_parses, model)` and return a
+      log-likelihood.
 
   Returns:
-    queues:
-    category_parse_results: TODO
+    queues: A dictionary mapping each query token to a ranked sequence of
+      candidates of the form `(logprob, (category, semantics))`
+    category_parse_results: Multi-level dictionary. First level keys are tokens
+      (elements of `tokens`) for which meanings are being explored. Second
+      level keys are candidate syntactic categories for the corresponding
+      token. Values are a weighted list of sentence parse results.
     dummy_var: TODO
   """
 
   get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
-          or get_semantic_arity
-
-  # Prepare for syntactic bootstrap: pre-calculate distributions over semantic
-  # form elements conditioned on syntactic category.
-  lf_ngrams = lex.lf_ngrams_mixed(alpha=alpha, order=1,
-                                  smooth=meaning_prior_smooth)
+      or get_semantic_arity
 
   # We will restrict semantic arities based on the observed arities available
   # for each category. Pre-calculate the necessary associations.
@@ -816,14 +856,21 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
   # Enumerate expressions just once! We'll bias the search over the enumerated
   # forms later.
-  candidate_exprs = set(ontology.iter_expressions(max_depth=4))
+  max_depth = 3
+  if cache_candidate_exprs:
+    candidate_exprs = getattr(predict_zero_shot, "candidate_exprs", None)
+    if candidate_exprs is None:
+      candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
+    predict_zero_shot.candidate_exprs = candidate_exprs
+  else:
+    candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
 
   # Shared dummy variable which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
   dummy_var = None
 
   # TODO need to work on *product space* for multiple query words
-  queues = {token: UniquePriorityQueue(maxsize=2500)
+  queues = {token: UniquePriorityQueue(maxsize=queue_limit)
             for token in tokens}
   category_parse_results = defaultdict(dict)
   for token, candidate_queue in queues.items():
@@ -833,20 +880,6 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       if category_weight == 0:
         continue
 
-      # Retrieve relevant bootstrap distribution p(meaning | syntax).
-      cat_lf_ngrams = lf_ngrams[category]
-      # Redistribute UNK probability uniformly across predicates not observed
-      # for this category.
-      # TODO do this outside of the loop
-      unk_lf_prob = cat_lf_ngrams.pop(None)
-      unobserved_preds = set(f.name for f in ontology.functions) - set(cat_lf_ngrams.keys())
-      cat_lf_ngrams.update({pred: unk_lf_prob / len(unobserved_preds)
-                           for pred in unobserved_preds})
-
-      L.info("% 20s %s", category,
-             ", ".join("%.03f %s" % (prob, pred) for pred, prob
-                       in sorted(cat_lf_ngrams.items(), key=lambda x: x[1], reverse=True)))
-
       # Attempt to parse with this parse category, and return the resulting
       # syntactic parses + sentence-level semantic forms, with a dummy variable
       # in place of where the candidate expressions will go.
@@ -854,18 +887,28 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
                                                    sentence, dummy_var=dummy_var)
       category_parse_results[token][category] = results
 
+      # Score candidate expressions.
       for expr in candidate_exprs:
         if get_arity(expr) not in category_sem_arities[category]:
           # TODO rather than arity-checking post-hoc, form a type request
           continue
 
         likelihood = 0.0
-        if bootstrap:
-          for predicate in expr.predicates():
-            if predicate.name in cat_lf_ngrams:
-              likelihood += np.log(cat_lf_ngrams[predicate.name])
+        # marginalizing over possible parses..
+        for result in results:
+          sentence_semantics = result.label()[0].semantics() \
+              .replace(dummy_var, expr).simplify()
 
-        joint_score = np.log(category_weight) + likelihood
+          # Compute p(meaning | syntax, sentence, parse)
+          logp = sum(likelihood_fn(token, category, expr, sentence_semantics, model)
+                     for likelihood_fn in likelihood_fns)
+          likelihood += np.exp(logp)
+
+        joint_score = np.log(category_weight) + np.log(likelihood)
+        if joint_score == -np.inf:
+          # Zero probability. Skip.
+          continue
+
         new_item = (joint_score, (category, expr))
         try:
           candidate_queue.put_nowait(new_item)
@@ -882,18 +925,18 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
   return queues, category_parse_results, dummy_var
 
 
-def augment_lexicon_distant(old_lex, query_tokens, query_token_syntaxes,
-                            sentence, ontology, model, answer,
-                            bootstrap=True, meaning_prior_smooth=1e-3,
-                            negative_samples=5, total_negative_mass=0.1,
-                            alpha=1e-3, beta=3.0):
+def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
+                    sentence, ontology, model,
+                    likelihood_fns, negative_samples=5,
+                    total_negative_mass=0.1, beta=3.0,
+                    **predict_zero_shot_args):
   """
-  Augment a lexicon with candidate meanings for a given word using distant
-  supervision. (The induced meanings for the queried words must yield parses
-  that lead to `answer` under the `model`.)
+  Augment a lexicon with candidate meanings for a given word using an abstract
+  success function. (The induced meanings for the queried words must yield
+  parses that yield `True` under the `success_fn`, given `model`.)
 
   Candidate entries will be assigned relative weights according to a posterior
-  distribution $P(word -> syntax, meaning | sentence, answer, lexicon)$. This
+  distribution $P(word -> syntax, meaning | sentence, success_fn, lexicon)$. This
   distribution incorporates multiple prior and likelihood terms:
 
   1. A prior over syntactic categories (derived by inspection of the current
@@ -918,11 +961,9 @@ def augment_lexicon_distant(old_lex, query_tokens, query_token_syntaxes,
     ontology: Available logical ontology -- used to enumerate possible logical
       forms.
     model: Scene model which evaluates logical forms to answers.
-    answer: Ground-truth answer to `sentence`.
-    bootstrap: If `True`, incorporate priors over LF predicates conditioned on
-      syntactic category when scoring candidate lexical entries.
-    meaning_prior_smooth: If not `None`, use this float quantity to add-k
-      smooth the prior distribution over meaning predicates.
+    likelihood_fns: Sequence of functions describing zero-shot likelihoods
+      `p(meaning | syntax, sentence, model)`. See `predict_zero_shot` for more
+      information.
     negative_samples: Add this many unique negative sample lexical
       entries to the lexicon for each token. (A negative sample is a
       high-scoring lexical entry which does not yield the correct
@@ -945,88 +986,87 @@ def augment_lexicon_distant(old_lex, query_tokens, query_token_syntaxes,
     lex._entries[token] = []
 
   ranked_candidates, category_parse_results, dummy_var = \
-      predict_zero_shot(lex, query_tokens, query_token_syntaxes, sentence, ontology,
-                        bootstrap=bootstrap, meaning_prior_smooth=meaning_prior_smooth,
-                        alpha=alpha)
-
-  successes = defaultdict(set)
-  failures = defaultdict(set)
-  semantics_results = {}
-  for token, candidate_queue in ranked_candidates.items():
-    # NB not parallelizing anything below
-    candidates = sorted(candidate_queue.queue,
-                        key=lambda item: -item[0])
-    for joint_score, (category, expr) in candidates:
-      parse_results = category_parse_results[token][category]
-
-      # Parse succeeded -- check the candidate results.
-      for result in parse_results:
-        semantics = result.label()[0].semantics()
-        # TODO can we pre-compute the simplification?
-        semantics = semantics.replace(dummy_var, expr).simplify()
-
-        # Check cached result first.
-        success = semantics_results.get(semantics)
-        if success is None:
-          # Evaluate the expression and cache result.
-          try:
-            pred_answer = model.evaluate(semantics)
-            success = pred_answer == answer
-          except (TypeError, AttributeError) as e:
-            # Type inconsistency. TODO catch this in the iter_expression
-            # stage, or typecheck before evaluating.
-            success = False
-          except AssertionError as e:
-            # Precondition of semantics failed to pass.
-            success = False
-
-          # Cache evaluation result.
-          semantics_results[semantics] = success
-
-        description = (joint_score, (category, expr))
-        if success:
-          # Parse succeeded with correct meaning. Add candidate lexical entry.
-          successes[token].add(description)
-        else:
-          if len(failures[token]) < negative_samples and description not in successes[token]:
-            failures[token].add(description)
+      predict_zero_shot(lex, query_tokens, query_token_syntaxes, sentence,
+                        ontology, model, likelihood_fns, **predict_zero_shot_args)
 
   for token in query_tokens:
-    try:
-      successes_t = list(successes[token])
-    except KeyError:
-      raise RuntimeError("Failed to derive any meanings for token %s." % token)
-    if not successes_t:
-      raise RuntimeError("Failed to derive any meanings for token %s." % token)
+    candidates = sorted(ranked_candidates[token].queue, key=lambda item: -item[0])
+    weights = np.array([weight for weight, _ in candidates])
+    entries = [entry for _, entry in candidates]
+
+    if len(entries) == 0:
+      raise NoParsesError("Failed to derive any meanings for token %s." % token, sentence)
 
     # Compute weights for competing entries by a stable softmax.
-    weights_t = np.array([weight for weight, _ in successes_t])
-    weights_t -= weights_t.max()
-    weights_t = np.exp(weights_t)
-    weights_t /= weights_t.sum()
-    weights_t *= beta
+    weights -= weights.max()
+    weights = np.exp(weights)
+    weights /= weights.sum()
+    weights *= beta
 
-    lex._entries[token] = [Token(token, category, expr, weight=softmax_weight)
-                           for (_, (category, expr)), softmax_weight
-                           in zip(successes_t, weights_t)]
+    lex._entries[token] = old_lex._entries[token] + \
+        [Token(token, category, expr, weight=weight)
+         for weight, (category, expr) in zip(weights, entries)]
 
-    # Negative-sample some top zero-shot candidates which failed
-    # parsing.
-    failures_t = failures[token]
-    negative_mass = total_negative_mass / len(failures_t)
-    lex._entries[token].extend(
-        [Token(token, category, expr, weight=negative_mass)
-         for _, (category, expr) in failures_t])
+    # # Negative-sample some top zero-shot candidates which failed
+    # # parsing.
+    # failures_t = failures[token]
+    # negative_mass = total_negative_mass / len(failures_t)
+    # lex._entries[token].extend(
+    #     [Token(token, category, expr, weight=negative_mass)
+    #      for _, (category, expr) in failures_t])
 
-    L.info("Inferred %i novel entries for token %s:", len(successes_t), token)
-    for (_, entry_info), weight in sorted(zip(successes_t, weights_t), key=lambda x: x[1], reverse=True):
-      L.info("%.4f %s", weight, entry_info)
-    L.info("Negatively sampled %i more novel entries for token %s:", len(failures_t), token)
-    for (_, entry_info) in failures_t:
-      L.info("%.4f %s", negative_mass, entry_info)
+    L.info("Inferred %i novel entries for token %s:", len(entries), token)
+    for entry, weight in sorted(zip(entries, weights), key=lambda x: x[1], reverse=True):
+      L.info("%.4f %s", weight, entry)
+    # L.info("Negatively sampled %i more novel entries for token %s:", len(failures_t), token)
+    # for (_, entry_info) in failures_t:
+    #   L.info("%.4f %s", negative_mass, entry_info)
 
 
   return lex
+
+
+def augment_lexicon_distant(old_lex, query_tokens, query_token_syntaxes,
+                            sentence, ontology, model, likelihood_fns, answer,
+                            **augment_kwargs):
+  """
+  Augment a lexicon with candidate meanings for a given word using distant
+  supervision. (Find word meanings such that the whole sentence meaning yields
+  an expected `answer`.)
+
+  For argument documentation, see `augment_lexicon`.
+  """
+  likelihood_fns = (build_distant_likelihood(answer),) + \
+      tuple(likelihood_fns)
+
+  return augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
+                         sentence, ontology, model, likelihood_fns,
+                         **augment_kwargs)
+
+
+def augment_lexicon_cross_situational(old_lex, query_tokens, query_token_syntaxes,
+                                      sentence, ontology, model, likelihood_fns,
+                                      **augment_kwargs):
+  likelihood_fns = (likelihood_scene,) + tuple(likelihood_fns)
+  return augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
+                         sentence, ontology, model, likelihood_fns,
+                         **augment_kwargs)
+
+
+def augment_lexicon_2afc(old_lex, query_tokens, query_token_syntaxes,
+                         sentence, ontology, models, likelihood_fns,
+                         **augment_kwargs):
+  """
+  Augment a lexicon with candidate meanings for a given word using 2AFC
+  supervision. (We assume that the uttered sentence is true of at least one of
+  the 2 scenes given in the tuple `models`.)
+
+  For argument documentation, see `augment_lexicon`.
+  """
+  likelihood_fns = (likelihood_2afc,) + tuple(likelihood_fns)
+  return augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
+                         sentence, ontology, models, likelihood_fns,
+                         **augment_kwargs)
 
 
 def filter_lexicon_entry(lexicon, entry, sentence, lf):
@@ -1066,63 +1106,3 @@ def filter_lexicon_entry(lexicon, entry, sentence, lf):
   new_lex._entries[entry] = [cand.token() for cand in valid_cands]
 
   return new_lex
-
-
-def lf_parts(lf_str):
-  """
-  Parse a logical form string into a set of candidate lexical items which
-  could be combined to produce the original LF.
-
-  >>> sorted(map(str, lf_parts("filter_shape(scene,'sphere')")))
-  ["'sphere'", "\\\\x.filter_shape(scene,'sphere')", '\\\\x.filter_shape(scene,x)', "\\\\x.filter_shape(x,'sphere')", 'scene']
-  """
-  # TODO avoid producing lambda expressions which don't make use of
-  # their arguments.
-
-  # Parse into a lambda calculus expression.
-  expr = l.Expression.fromstring(lf_str)
-  assert isinstance(expr, l.ApplicationExpression)
-
-  # First candidates: all available constants
-  candidates = set([l.ConstantExpression(const)
-                    for const in expr.constants()])
-
-  # All level-1 abstractions of the LF
-  queue = [expr]
-  while queue:
-    node = queue.pop()
-
-    n_constants = 0
-    for arg in node.args:
-      if isinstance(arg, l.ConstantExpression):
-        n_constants += 1
-      elif isinstance(arg, l.ApplicationExpression):
-        queue.append(arg)
-      else:
-        assert False, "Unexpected type " + str(arg)
-
-    # Hard constraint for now: all but one variable should be a
-    # constant expression.
-    if n_constants < len(node.args) - 1:
-      continue
-
-    # Create the candidate node(s).
-    variable = l.Variable("x")
-    for i, arg in enumerate(node.args):
-      if isinstance(arg, l.ApplicationExpression):
-        new_arg_cands = [l.VariableExpression(variable)]
-      else:
-        new_arg_cands = [arg]
-        if n_constants == len(node.args):
-          # All args are constant, so turning each constant into
-          # a variable is also legal. Do that.
-          new_arg_cands.append(l.VariableExpression(variable))
-
-      # Enumerate candidate new arguments and yield candidate new exprs.
-      for new_arg_cand in new_arg_cands:
-        new_args = node.args[:i] + [new_arg_cand] + node.args[i + 1:]
-        app_expr = l.ApplicationExpression(node.pred, new_args[0])
-        app_expr = reduce(lambda x, y: l.ApplicationExpression(x, y), new_args[1:], app_expr)
-        candidates.add(l.LambdaExpression(variable, app_expr))
-
-  return candidates

@@ -1860,7 +1860,8 @@ class TypeSystem(object):
 
     for primitive_type in primitive_types:
         if isinstance(primitive_type, str):
-            self._types[primitive_type] = BasicType(primitive_type)
+            self._types[primitive_type] = BasicType(name=primitive_type,
+                                                    parent=ENTITY_TYPE)
         else:
             assert isinstance(primitive_type, BasicType)
             self._types[primitive_type.name] = primitive_type
@@ -2162,6 +2163,7 @@ class Ontology(object):
 
     self.add_functions(functions)
     self.constant_system = ConstantSystem(constants)
+
     self._prepare()
 
   @property
@@ -2198,6 +2200,10 @@ class Ontology(object):
                 function.name, function.arity, self.get_expr_arity(function.defn),
                 function.defn)
         assert function.arity == self.get_expr_arity(function.defn), function.name
+
+  def add_constants(self, constants):
+    self.constants = constants
+    self.constants_dict = {c.name: c for c in constants}
 
   def _prepare(self):
     self._nltk_type_signature = self._make_nltk_type_signature()
@@ -2358,7 +2364,7 @@ class Ontology(object):
                 try:
                   # TODO make sure variable names are unique before this happens
                   self.typecheck(candidate, extra_types)
-                except l.InconsistentTypeHierarchyException:
+                except InconsistentTypeHierarchyException:
                   pass
                 else:
                   yield candidate
@@ -2491,6 +2497,9 @@ class Ontology(object):
     elif isinstance(expr, (FunctionVariableExpression, ConstantExpression)) \
         and expr.variable.name in self.functions_dict:
       return self.functions_dict[expr.variable.name].arity
+    elif isinstance(expr, ConstantExpression) \
+        and expr.variable.name in self.constants_dict:
+      return 0
     elif isinstance(expr, IndividualVariableExpression):
       return 0
     elif callable(expr):
@@ -2595,7 +2604,7 @@ class Ontology(object):
 
 
 def compute_type_raised_semantics(semantics):
-  core = deepcopy(semantics)
+  core = copy.deepcopy(semantics)
   parent = None
   while isinstance(core, LambdaExpression):
     parent = core
