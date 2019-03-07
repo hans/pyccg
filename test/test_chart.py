@@ -66,7 +66,7 @@ def test_parse_oblique():
   lex = Lexicon.fromstring(r"""
   :- S, NP, PP
 
-  place => S/NP/PP
+  place => S/PP/NP
   it => NP
   on => PP/NP
   the_table => NP
