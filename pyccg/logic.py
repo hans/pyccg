@@ -2264,8 +2264,6 @@ class Ontology(object):
     for expr_type in self.EXPR_TYPES:
       if expr_type == ApplicationExpression:
         # Loop over functions according to their weights.
-        # from pprint import pprint
-        # pprint(sorted([(fn.weight, fn.name) for fn in self.functions], key=lambda x: x[0]))
         fn_weight_key = (lambda fn: function_weights[fn.name]) if function_weights is not None \
                         else (lambda fn: fn.weight)
         fns_sorted = sorted(self.functions_dict.values(), key=fn_weight_key,
