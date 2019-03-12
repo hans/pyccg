@@ -4,9 +4,6 @@ import heapq
 import itertools
 from queue import PriorityQueue
 
-import matplotlib
-matplotlib.use("Agg")
-from matplotlib import pyplot as plt
 import numpy as np
 
 
@@ -83,6 +80,10 @@ class Distribution(Counter):
     """
     Save a bar plot of the distribution.
     """
+    import matplotlib
+    matplotlib.use("Agg")
+    from matplotlib import pyplot as plt
+
     support = sorted(self.keys(), key=lambda k: distribution[k], reverse=True)
 
     if save_csv:
