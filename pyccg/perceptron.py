@@ -94,7 +94,7 @@ def update_perceptron(lexicon, sentence, model, success_fn,
   # Sort results by descending parse score.
   correct_results = sorted(correct_results, key=lambda r: r[0], reverse=True)
   incorrect_results = sorted(incorrect_results, key=lambda r: r[0], reverse=True)
-  
+
   if update_method == "perceptron":
     correct_results = correct_results[:1]
     incorrect_results = incorrect_results[:1]
@@ -112,10 +112,10 @@ def update_perceptron(lexicon, sentence, model, success_fn,
                              [positive_mass, -negative_mass]):
     parse_results = [r[1] for r in results]
     if update_method == "reinforce":
-	    parse_scores = delta * softmax(np.array([r[0] for r in results]))
+      parse_scores = delta * softmax(np.array([r[0] for r in results]))
     else:
-      parse_scores = delta
-      
+      parse_scores = np.repeat(delta, len(results))
+
     for score_delta, result in zip(parse_scores, parse_results):
       leaf_seq = tuple(leaf_token for _, leaf_token in result.pos())
       if leaf_seq not in observed_leaf_sequences:
@@ -144,7 +144,7 @@ def update_perceptron_distant(lexicon, sentence, model, answer,
       else:
         pred_answer = model.evaluate(root_token.semantics())
         answer_score = 0.0
-      
+
       success = pred_answer == answer
     except (TypeError, AttributeError) as e:
       # Type inconsistency. TODO catch this in the iter_expression
