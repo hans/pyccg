@@ -577,7 +577,7 @@ class Variable(object):
     return bindings.get(self, self)
 
   def __hash__(self):
-    return hash(self.name)
+    return hash((self.name, self.type))
 
   def __str__(self):
     return self.name
@@ -2223,6 +2223,7 @@ class Ontology(object):
 
     return ret
 
+  @functools.lru_cache(maxsize=None)
   @listify
   def _iter_expressions_inner(self, max_depth, bound_vars,
                               type_request=None, function_weights=None,
@@ -2250,6 +2251,8 @@ class Ontology(object):
       # require some bound variables to generate a valid lexical entry
       # semantics
       return
+
+    newly_used_constants_expr = frozenset(newly_used_constants_expr or [])
 
     for expr_type in self.EXPR_TYPES:
       if expr_type == ApplicationExpression:
@@ -2294,12 +2297,9 @@ class Ontology(object):
                                                        type_request=arg_type_request,
                                                        function_weights=function_weights,
                                                        use_unused_constants=use_unused_constants,
-                                                       newly_used_constants_expr=nuce)
+                                                       newly_used_constants_expr=frozenset(nuce))
                 for expr in results:
-                  if nuce is None:
-                    new_nuce = {c.name for c in expr.constants()}
-                  else:
-                    new_nuce = nuce | {c.name for c in expr.constants()}
+                  new_nuce = nuce | {c.name for c in expr.constants()}
                   yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
 
               for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
