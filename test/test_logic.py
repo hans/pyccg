@@ -56,6 +56,13 @@ def _make_simple_mock_ontology():
   return ontology
 
 
+class test_type_match():
+  ont = _make_simple_mock_ontology()
+
+  ok_(not ont.constants_dict["baz"].type.matches(ont.constants_dict["qux"].type),
+      "'boolean' and 'obj' types should not match")
+
+
 def test_get_expr_arity():
   ont = _make_simple_mock_ontology()
 
@@ -95,15 +102,19 @@ def test_iter_expressions():
     (3, "Consider both argument orders for three-place function",
      (r"\z1 z2.threeplace(z1,z2,baz)", r"\z2 z1.threeplace(z1,z2,baz)"), ()),
     (3, "Enforce type constraints on higher-order functions",
-     (), (r"\z1.invented_1(not_,z1)")),
+     (), (r"\z1.invented_1(not_,z1)",)),
+    (3, "Enforce type constraints on constants",
+     (), (r"\z1.and_(z1,qux)",)),
   ]
 
   def do_case(max_depth, msg, assert_in, assert_not_in):
     expressions = set(ontology.iter_expressions(max_depth=max_depth))
-    expression_strs = list(map(str, expressions))
+    expression_strs = sorted(map(str, expressions))
 
-    present = [expr in expression_strs for expr in assert_in]
-    ok_(all(present), msg)
+    for expr in assert_in:
+      ok_(expr in expression_strs, "%s: should contain %s" % (msg, expr))
+    for expr in assert_not_in:
+      ok_(expr not in expression_strs, "%s: should not contain %s" % (msg, expr))
 
   for max_depth, msg, assert_in, assert_not_in in cases:
     yield do_case, max_depth, msg, assert_in, assert_not_in
@@ -118,6 +129,19 @@ def test_iter_expressions_with_used_constants():
 
   ok_(r"foo(qux)" in expression_strs, "Use of new constant variable")
   ok_(r"baz" not in expression_strs, "Cannot use used constant variable")
+
+
+def test_iter_expressions_after_update():
+  """
+  Ensure that ontology correctly returns expression options after adding a new
+  function.
+  """
+  ontology = _make_simple_mock_ontology()
+  ontology.add_functions([ontology.types.new_function("newfunction", ("obj", "boolean"), lambda a: True)])
+
+  expressions = set(ontology.iter_expressions(max_depth=3))
+  expression_strs = sorted(map(str, expressions))
+  assert r"\z1.newfunction(z1)" in expression_strs
 
 
 def test_as_ec_sexpr():

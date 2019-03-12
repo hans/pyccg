@@ -577,7 +577,7 @@ class Variable(object):
     return bindings.get(self, self)
 
   def __hash__(self):
-    return hash(self.name)
+    return hash((self.name, self.type))
 
   def __str__(self):
     return self.name
@@ -1860,8 +1860,7 @@ class TypeSystem(object):
 
     for primitive_type in primitive_types:
         if isinstance(primitive_type, str):
-            self._types[primitive_type] = BasicType(name=primitive_type,
-                                                    parent=ENTITY_TYPE)
+            self._types[primitive_type] = BasicType(name=primitive_type)
         else:
             assert isinstance(primitive_type, BasicType)
             self._types[primitive_type.name] = primitive_type
@@ -2179,6 +2178,8 @@ class Ontology(object):
                 FunctionVariableExpression]
 
   def add_functions(self, functions):
+    self._clear_expression_cache()
+
     # Ignore functions which already exist.
     new_functions = []
     for function in functions:
@@ -2202,6 +2203,8 @@ class Ontology(object):
         assert function.arity == self.get_expr_arity(function.defn), function.name
 
   def add_constants(self, constants):
+    self._iter_expressions_inner.clear_cache()
+
     self.constants = constants
     self.constants_dict = {c.name: c for c in constants}
 
@@ -2224,6 +2227,10 @@ class Ontology(object):
 
     return ret
 
+  def _clear_expression_cache(self):
+    self._iter_expressions_inner.cache_clear()
+
+  @functools.lru_cache(maxsize=None)
   @listify
   def _iter_expressions_inner(self, max_depth, bound_vars,
                               type_request=None, function_weights=None,
@@ -2251,6 +2258,8 @@ class Ontology(object):
       # require some bound variables to generate a valid lexical entry
       # semantics
       return
+
+    newly_used_constants_expr = frozenset(newly_used_constants_expr or [])
 
     for expr_type in self.EXPR_TYPES:
       if expr_type == ApplicationExpression:
@@ -2293,12 +2302,9 @@ class Ontology(object):
                                                        type_request=arg_type_request,
                                                        function_weights=function_weights,
                                                        use_unused_constants=use_unused_constants,
-                                                       newly_used_constants_expr=nuce)
+                                                       newly_used_constants_expr=frozenset(nuce))
                 for expr in results:
-                  if nuce is None:
-                    new_nuce = {c.name for c in expr.constants()}
-                  else:
-                    new_nuce = nuce | {c.name for c in expr.constants()}
+                  new_nuce = nuce | {c.name for c in expr.constants()}
                   yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
 
               for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
@@ -2414,9 +2420,11 @@ class Ontology(object):
     expr.typecheck(signature=type_signature)
 
   def register_expressions(self, expressions):
+    self._clear_expression_cache()
     self.constant_system.mark_used_expressions(expressions)
 
   def override_registered_expressions(self, expressions):
+    self._clear_expression_cache()
     self.constant_system.override_used_expressions(expressions)
 
   def infer_type(self, expr, variable_name, extra_types=None):
