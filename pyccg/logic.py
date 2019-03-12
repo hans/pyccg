@@ -2178,6 +2178,8 @@ class Ontology(object):
                 FunctionVariableExpression]
 
   def add_functions(self, functions):
+    self._clear_expression_cache()
+
     # Ignore functions which already exist.
     new_functions = []
     for function in functions:
@@ -2201,6 +2203,8 @@ class Ontology(object):
         assert function.arity == self.get_expr_arity(function.defn), function.name
 
   def add_constants(self, constants):
+    self._iter_expressions_inner.clear_cache()
+
     self.constants = constants
     self.constants_dict = {c.name: c for c in constants}
 
@@ -2222,6 +2226,9 @@ class Ontology(object):
         extract_lambda(expr) for expr in ret)
 
     return ret
+
+  def _clear_expression_cache(self):
+    self._iter_expressions_inner.cache_clear()
 
   @functools.lru_cache(maxsize=None)
   @listify
@@ -2415,9 +2422,11 @@ class Ontology(object):
     expr.typecheck(signature=type_signature)
 
   def register_expressions(self, expressions):
+    self._clear_expression_cache()
     self.constant_system.mark_used_expressions(expressions)
 
   def override_registered_expressions(self, expressions):
+    self._clear_expression_cache()
     self.constant_system.override_used_expressions(expressions)
 
   def infer_type(self, expr, variable_name, extra_types=None):

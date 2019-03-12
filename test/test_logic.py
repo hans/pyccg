@@ -131,6 +131,19 @@ def test_iter_expressions_with_used_constants():
   ok_(r"baz" not in expression_strs, "Cannot use used constant variable")
 
 
+def test_iter_expressions_after_update():
+  """
+  Ensure that ontology correctly returns expression options after adding a new
+  function.
+  """
+  ontology = _make_simple_mock_ontology()
+  ontology.add_functions([ontology.types.new_function("newfunction", ("obj", "boolean"), lambda a: True)])
+
+  expressions = set(ontology.iter_expressions(max_depth=3))
+  expression_strs = sorted(map(str, expressions))
+  assert r"\z1.newfunction(z1)" in expression_strs
+
+
 def test_as_ec_sexpr():
   ont = _make_mock_ontology()
   expr = Expression.fromstring(r"\x y z.foo(bar(x,y),baz(y,z),blah)")
