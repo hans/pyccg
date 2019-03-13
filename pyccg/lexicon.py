@@ -956,8 +956,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
 def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
                     sentence, ontology, model,
-                    likelihood_fns, negative_samples=5,
-                    total_negative_mass=0.1, beta=3.0,
+                    likelihood_fns,
+                    beta=3.0,
                     **predict_zero_shot_args):
   """
   Augment a lexicon with candidate meanings for a given word using an abstract
@@ -993,13 +993,6 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
     likelihood_fns: Sequence of functions describing zero-shot likelihoods
       `p(meaning | syntax, sentence, model)`. See `predict_zero_shot` for more
       information.
-    negative_samples: Add this many unique negative sample lexical
-      entries to the lexicon for each token. (A negative sample is a
-      high-scoring lexical entry which does not yield the correct
-      parse/answer.)
-    total_negative_mass: Distribute this much weight mass across
-      negative samples. (Each negative sample will have an entry weight of
-      `total_negative_mass / negative_samples.`)
     alpha: Smoothing parameter for syntactic category prior distribution (see
       `get_candidate_categories`).
     beta: Total mass to assign to novel candidate lexical entries. (Mass will
