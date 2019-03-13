@@ -23,7 +23,7 @@ class WordLearner(object):
                total_negative_mass=0.1, syntax_prior_smooth=1e-3,
                meaning_prior_smooth=1e-3, bootstrap_alpha=0.25,
                update_perceptron_algo="perceptron",
-               prune_entries=3, zero_shot_limit=5,
+               prune_entries=None, zero_shot_limit=5,
                limit_induction=False):
     """
     Args:
@@ -308,8 +308,9 @@ class WordLearner(object):
       except NoParsesError:
         return []
 
-    prune_count = self.lexicon.prune(max_entries=self.prune_entries)
-    L.info("Pruned %i entries from lexicon.", prune_count)
+    if self.prune_entries is not None:
+      prune_count = self.lexicon.prune(max_entries=self.prune_entries)
+      L.info("Pruned %i entries from lexicon.", prune_count)
 
     return weighted_results
 
