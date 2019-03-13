@@ -744,33 +744,24 @@ def build_bootstrap_likelihood(lex, sentence, ontology,
            ", ".join("%.03f %s" % (prob, pred) for pred, prob
                      in sorted(lf_ngrams[category].items(), key=lambda x: x[1], reverse=True)))
 
-  def likelihood_fn(token, category, expr, sentence_parse, model):
-    # Retrieve relevant bootstrap distribution p(meaning | syntax).
-    cat_lf_ngrams = lf_ngrams[category]
+  def likelihood_fn(tokens, categories, exprs, sentence_parse, model):
     likelihood = 0.0
-    for predicate in expr.predicates():
-      if predicate.name in cat_lf_ngrams:
-        likelihood += np.log(cat_lf_ngrams[predicate.name])
+    for token, category, expr in zip(tokens, categories, exprs):
+      # Retrieve relevant bootstrap distribution p(meaning | syntax).
+      cat_lf_ngrams = lf_ngrams[category]
+      for predicate in expr.predicates():
+        if predicate.name in cat_lf_ngrams:
+          likelihood += np.log(cat_lf_ngrams[predicate.name])
 
     return likelihood
 
   return likelihood_fn
 
 
-def likelihood_scene(token, category, expr, sentence_parse, model):
+def likelihood_scene(tokens, categories, exprs, sentence_parse, model):
   """
   0-1 likelihood function, 1 when a sentence is true of the model and false
   otherwise.
-
-  Args:
-    token:
-    category:
-    expr:
-    sentence_parses:
-    model:
-
-  Returns:
-    log_likelihood:
   """
   try:
     return 0. if model.evaluate(sentence_parse) == True else -np.inf
@@ -789,7 +780,7 @@ def build_distant_likelihood(answer):
   Returns:
     likelihood_fn: A likelihood function to be used with `predict_zero_shot`.
   """
-  def likelihood_fn(token, category, expr, sentence_parse, model):
+  def likelihood_fn(tokens, categories, exprs, sentence_parse, model):
     try:
       success = model.evaluate(sentence_parse) == answer
     except:
@@ -800,7 +791,7 @@ def build_distant_likelihood(answer):
   return likelihood_fn
 
 
-def likelihood_2afc(token, category, expr, sentence_parse, models):
+def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
   """
   0-1 likelihood function for the 2AFC paradigm, where an uttered
   sentence is known to be true of at least one of two scenes.
@@ -839,11 +830,15 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
     sentence:
     ontology:
     model:
-    likelihood_fns: Collection of likelihood functions `p(meaning | syntax,
-      sentence, model)` used to score candidate meaning--syntax pairs for a
-      word.  Function should accept arguments `(token, candidate_category,
-      candidate_meaning, candidate_semantic_parses, model)` and return a
-      log-likelihood.
+    likelihood_fns: Collection of likelihood functions
+      `p(meanings | syntaxes, sentence, model)` used to score candidate
+      meaning--syntax settings for a subset of `tokens`.  Each function should
+      accept arguments `(tokens, candidate_categories, candidate_meanings,
+      candidate_semantic_parse, model)`, where `tokens` are assigned specific
+      categories given in `candidate_categories` and specific meanings given in
+      `candidate_meanings`, yielding a single semantic analysis of the sentence
+      `candidate_semantic_parse`. The function should return a log-likelihood
+      `p(candidate_meanings | candidate_syntaxes, sentence, model)`.
 
   Returns:
     queues: A dictionary mapping each query token to a ranked sequence of
@@ -991,8 +986,8 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
       forms.
     model: Scene model which evaluates logical forms to answers.
     likelihood_fns: Sequence of functions describing zero-shot likelihoods
-      `p(meaning | syntax, sentence, model)`. See `predict_zero_shot` for more
-      information.
+      `p(meanings | syntaxes, sentence, model)`. See `predict_zero_shot` for
+      more information.
     alpha: Smoothing parameter for syntactic category prior distribution (see
       `get_candidate_categories`).
     beta: Total mass to assign to novel candidate lexical entries. (Mass will
