@@ -816,8 +816,7 @@ def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
 
 
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
-                      model, likelihood_fns,
-                      meaning_prior_smooth=1e-3, queue_limit=5,
+                      model, likelihood_fns, queue_limit=5,
                       cache_candidate_exprs=True):
   """
   Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
