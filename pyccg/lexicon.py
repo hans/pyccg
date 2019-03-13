@@ -817,7 +817,7 @@ def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
 
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
                       model, likelihood_fns,
-                      meaning_prior_smooth=1e-3, alpha=0.25, queue_limit=5,
+                      meaning_prior_smooth=1e-3, queue_limit=5,
                       cache_candidate_exprs=True):
   """
   Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
@@ -988,8 +988,6 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
     likelihood_fns: Sequence of functions describing zero-shot likelihoods
       `p(meanings | syntaxes, sentence, model)`. See `predict_zero_shot` for
       more information.
-    alpha: Smoothing parameter for syntactic category prior distribution (see
-      `get_candidate_categories`).
     beta: Total mass to assign to novel candidate lexical entries. (Mass will
       be divided according to the one-shot probability distribution induced from
       the example.)
