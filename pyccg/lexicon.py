@@ -133,6 +133,12 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     return cls(starts, primitives, families, entries,
                ontology=ontology)
 
+  def __eq__(self, other):
+    return isinstance(other, Lexicon) and self._starts == other._starts \
+        and self._primitives == other._primitives and self._families == other._families \
+        and self._entries == other._entries \
+        and self._derived_categories == other._derived_categories
+
   def clone(self, retain_semantics=True):
     """
     Return a clone of the current lexicon instance.
@@ -165,7 +171,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
     return prune_count
 
-  def debug_print(self, stream=sys.stderr):
+  def debug_print(self, stream=sys.stdout):
     for token, entries in self._entries.items():
       for entry in entries:
         stream.write("%.3f %s\n" % (entry.weight(), entry))
@@ -502,10 +508,10 @@ class Token(object):
 
   __repr__ = __str__
 
-  def __cmp__(self, other):
-    if not isinstance(other, Token): return -1
-    return cmp((self._categ, self._weight, self._semantics),
-               (other.categ(), other.weight(), other.semantics()))
+  def __eq__(self, other):
+    return isinstance(other, Token) and self.categ() == other.categ() \
+        and self.weight() == other.weight() \
+        and self.semantics() == other.semantics()
 
   def __hash__(self):
     return hash((self._token, self._categ, self._weight, self._semantics))
@@ -643,18 +649,19 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
   return cat_dists
 
 
-def attempt_candidate_parse(lexicon, token, candidate_category,
-                            candidate_expressions, sentence, dummy_var=None,
+def attempt_candidate_parse(lexicon, tokens, candidate_categories,
+                            candidate_expressions, sentence, dummy_vars,
                             allow_composition=True):
   """
-  Attempt to parse a sentence, mapping `token` to a new candidate lexical
-  entry.
+  Attempt to parse a sentence, mapping `tokens` to new candidate
+  lexical entries.
 
   Arguments:
     lexicon: Current lexicon. Will modify in place -- send a copy.
-    token: String token to be attempted.
-    candidate_category:
-    candidate_expressions: Collection of candidate semantic forms.
+    tokens: List of string token(s) to be attempted.
+    candidate_categories: List of candidate categories for each token (one per
+      token).
+    candidate_expressions: List of candidate expression lists for each token.
     sentence: Sentence which we are attempting to parse.
   """
 
@@ -662,46 +669,47 @@ def attempt_candidate_parse(lexicon, token, candidate_category,
       or get_semantic_arity
 
   # Prepare dummy variable which will be inserted into parse checks.
-  sub_target = dummy_var or l.Variable("F000")
-  sub_expr = l.FunctionVariableExpression(sub_target)
+  sub_exprs = {token: l.FunctionVariableExpression(dummy_vars[token])
+               for token in tokens}
 
-  lexicon._entries[token] = [Token(token, candidate_category, sub_expr)]
+  lexicon = lexicon.clone()
+  for token, syntax in zip(tokens, candidate_categories):
+    lexicon._entries[token] = [Token(token, syntax, sub_exprs[token])]
 
   parse_results = []
 
   # First attempt a parse with only function application rules.
   results = chart.WeightedCCGChartParser(lexicon, ruleset=chart.ApplicationRuleSet) \
       .parse(sentence)
-  if results or not allow_composition:
-    lexicon._entries[token] = []
-    return results, sub_target
+  if True:#results or not allow_composition:
+    return results
 
-  # Attempt to parse, allowing for function composition. In order to support
-  # this we need to pass a dummy expression which is a lambda.
-  arities = {expr: get_arity(expr) for expr in candidate_expressions}
-  max_arity = max(arities.values())
+  # # Attempt to parse, allowing for function composition. In order to support
+  # # this we need to pass a dummy expression which is a lambda.
+  # arities = {expr: get_arity(expr) for expr in candidate_expressions}
+  # max_arity = max(arities.values())
 
-  results, sub_expr_original = [], sub_expr
-  for arity in range(1, max(arities.values()) + 1):
-    sub_expr = sub_expr_original
+  # results, sub_expr_original = [], sub_expr
+  # for arity in range(1, max(arities.values()) + 1):
+  #   sub_expr = sub_expr_original
 
-    variables = [l.Variable("z%i" % (i + 1)) for i in range(arity)]
-    # Build curried application expression.
-    term = sub_expr
-    for variable in variables:
-      term = l.ApplicationExpression(term, l.IndividualVariableExpression(variable))
+  #   variables = [l.Variable("z%i" % (i + 1)) for i in range(arity)]
+  #   # Build curried application expression.
+  #   term = sub_expr
+  #   for variable in variables:
+  #     term = l.ApplicationExpression(term, l.IndividualVariableExpression(variable))
 
-    # Build surrounding lambda expression.
-    sub_expr = term
-    for variable in variables[::-1]:
-      sub_expr = l.LambdaExpression(variable, sub_expr)
+  #   # Build surrounding lambda expression.
+  #   sub_expr = term
+  #   for variable in variables[::-1]:
+  #     sub_expr = l.LambdaExpression(variable, sub_expr)
 
-    lexicon._entries[token] = [Token(token, candidate_category, sub_expr)]
-    results.extend(
-        chart.WeightedCCGChartParser(lexicon, ruleset=chart.DefaultRuleSet).parse(sentence))
+  #   lexicon._entries[token] = [Token(token, candidate_category, sub_expr)]
+  #   results.extend(
+  #       chart.WeightedCCGChartParser(lexicon, ruleset=chart.DefaultRuleSet).parse(sentence))
 
-  lexicon._entries[token] = []
-  return results, sub_target
+  # lexicon._entries[token] = []
+  # return results, sub_target
 
 
 def build_bootstrap_likelihood(lex, sentence, ontology,
@@ -865,64 +873,85 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
   else:
     candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
 
-  # Shared dummy variable which is included in candidate semantic forms, to be
+  # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
-  dummy_var = None
+  dummy_vars = {token: l.Variable("F%03i" % i) for i, token in enumerate(tokens)}
 
-  # TODO need to work on *product space* for multiple query words
-  queues = {token: UniquePriorityQueue(maxsize=queue_limit)
-            for token in tokens}
-  category_parse_results = defaultdict(dict)
-  for token, candidate_queue in queues.items():
-    token_syntaxes = candidate_syntaxes[token]
-    L.info("Candidate syntaxes for %s: %r", token, token_syntaxes)
-    for category, category_weight in token_syntaxes.items():
-      if category_weight == 0:
-        continue
+  category_parse_results = {}
+  candidate_queue = None
+  for depth in range(1, len(tokens) + 1):
+    candidate_queue = UniquePriorityQueue(maxsize=queue_limit)
 
-      # Attempt to parse with this parse category, and return the resulting
-      # syntactic parses + sentence-level semantic forms, with a dummy variable
-      # in place of where the candidate expressions will go.
-      results, dummy_var = attempt_candidate_parse(lex, token, category, candidate_exprs,
-                                                   sentence, dummy_var=dummy_var)
-      category_parse_results[token][category] = results
-
-      # Score candidate expressions.
-      for expr in candidate_exprs:
-        if get_arity(expr) not in category_sem_arities[category]:
-          # TODO rather than arity-checking post-hoc, form a type request
+    for token_comb in itertools.combinations(tokens, depth):
+      token_syntaxes = [list(candidate_syntaxes[token].support) for token in token_comb]
+      for syntax_comb in itertools.product(*token_syntaxes):
+        syntax_weights = [candidate_syntaxes[token][cat] for token, cat in zip(token_comb, syntax_comb)]
+        if any(weight == 0 for weight in syntax_weights):
           continue
 
-        likelihood = 0.0
-        # marginalizing over possible parses..
-        for result in results:
-          sentence_semantics = result.label()[0].semantics() \
-              .replace(dummy_var, expr).simplify()
+        # Attempt to parse with this joint syntactic assignment, and return the
+        # resulting syntactic parses + sentence-level semantic forms,, with
+        # dummy variables in place of where the candidate expressions will go.
+        results = attempt_candidate_parse(lex, token_comb,
+                                          syntax_comb,
+                                          candidate_exprs,
+                                          sentence,
+                                          dummy_vars)
+        category_parse_results[syntax_comb] = results
 
-          # Compute p(meaning | syntax, sentence, parse)
-          logp = sum(likelihood_fn(token, category, expr, sentence_semantics, model)
-                     for likelihood_fn in likelihood_fns)
-          likelihood += np.exp(logp)
+        # Now enumerate semantic forms.
+        for expr_comb in itertools.product(candidate_exprs, repeat=len(token_comb)):
+          # Rule out syntax--semantics combinations which have arity
+          # mismatches. TODO rather than arity-checking post-hoc, form a type
+          # request.
+          arity_match = True
+          for expr, categ in zip(expr_comb, syntax_comb):
+            arity_match = arity_match and (get_arity(expr) in category_sem_arities[categ])
+          if not arity_match:
+            continue
 
-        joint_score = np.log(category_weight) + np.log(likelihood)
-        if joint_score == -np.inf:
-          # Zero probability. Skip.
-          continue
+          # Compute likelihood of this joint syntax--semantics assignment.
+          likelihood = 0.0
+          # marginalizing over possible parses ..
+          for result in results:
+            # Swap in semantic values for each token.
+            sentence_semantics = result.label()[0].semantics()
+            for token, token_expr in zip(token_comb, expr_comb):
+              dummy_var = dummy_vars[token]
+              sentence_semantics = sentence_semantics.replace(dummy_var, token_expr)
+            sentence_semantics = sentence_semantics.simplify()
 
-        new_item = (joint_score, (category, expr))
-        try:
-          candidate_queue.put_nowait(new_item)
-        except queue.Full:
-          # See if this candidate is better than the worst item.
-          worst = candidate_queue.get()
-          if worst[0] < joint_score:
-            replacement = new_item
-          else:
-            replacement = worst
+            # Compute p(meaning | syntax, sentence, parse)
+            logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
+                                     sentence_semantics, model)
+                       for likelihood_fn in likelihood_fns)
+            likelihood += np.exp(logp)
 
-          candidate_queue.put_nowait(replacement)
+            # Add category priors.
+            log_prior = sum(np.log(weight) for weight in syntax_weights)
+            joint_score = log_prior + np.log(likelihood)
+            if joint_score == -np.inf:
+              # Zero probability. Skip.
+              continue
 
-  return queues, category_parse_results, dummy_var
+            new_item = (joint_score, (token_comb, syntax_comb, expr_comb))
+            try:
+              candidate_queue.put_nowait(new_item)
+            except queue.Full:
+              # See if this candidate is better than the worst item.
+              worst = candidate_queue.get()
+              if worst[0] < joint_score:
+                replacement = new_item
+              else:
+                replacement = worst
+
+              candidate_queue.put_nowait(replacement)
+
+    if candidate_queue.qsize() > 0:
+      # We have a result. Quit and don't search at higher depth.
+      return candidate_queue, category_parse_results, dummy_vars
+
+  return candidate_queue, category_parse_results, dummy_vars
 
 
 def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
@@ -981,47 +1010,29 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
   # Target lexicon to be returned.
   lex = old_lex.clone()
 
-  # TODO may overwrite
-  for token in query_tokens:
-    lex._entries[token] = []
-
-  ranked_candidates, category_parse_results, dummy_var = \
+  ranked_candidates, category_parse_results, dummy_vars = \
       predict_zero_shot(lex, query_tokens, query_token_syntaxes, sentence,
                         ontology, model, likelihood_fns, **predict_zero_shot_args)
 
-  for token in query_tokens:
-    candidates = sorted(ranked_candidates[token].queue, key=lambda item: -item[0])
-    weights = np.array([weight for weight, _ in candidates])
-    entries = [entry for _, entry in candidates]
+  candidates = sorted(ranked_candidates.queue, key=lambda item: -item[0])
+  new_entries = defaultdict(Counter)
+  # Calculate marginal p(syntax, meaning | sentence) for each token.
+  for logp, (tokens, syntaxes, meanings) in candidates:
+    for token, syntax, meaning in zip(tokens, syntaxes, meanings):
+      new_entries[token][syntax, meaning] += np.exp(logp)
 
-    if len(entries) == 0:
+  # Construct a new lexicon.
+  for token, candidates in new_entries.items():
+    if len(candidates) == 0:
       raise NoParsesError("Failed to derive any meanings for token %s." % token, sentence)
 
-    # Compute weights for competing entries by a stable softmax.
-    weights -= weights.max()
-    weights = np.exp(weights)
-    weights /= weights.sum()
-    weights *= beta
+    total_mass = sum(candidates.values())
+    lex._entries[token] = [Token(token, syntax, meaning, weight / total_mass * beta)
+                           for (syntax, meaning), weight in candidates.items()]
 
-    lex._entries[token] = old_lex._entries[token] + \
-        [Token(token, category, expr, weight=weight)
-         for weight, (category, expr) in zip(weights, entries)]
-
-    # # Negative-sample some top zero-shot candidates which failed
-    # # parsing.
-    # failures_t = failures[token]
-    # negative_mass = total_negative_mass / len(failures_t)
-    # lex._entries[token].extend(
-    #     [Token(token, category, expr, weight=negative_mass)
-    #      for _, (category, expr) in failures_t])
-
-    L.info("Inferred %i novel entries for token %s:", len(entries), token)
-    for entry, weight in sorted(zip(entries, weights), key=lambda x: x[1], reverse=True):
-      L.info("%.4f %s", weight, entry)
-    # L.info("Negatively sampled %i more novel entries for token %s:", len(failures_t), token)
-    # for (_, entry_info) in failures_t:
-    #   L.info("%.4f %s", negative_mass, entry_info)
-
+    L.info("Inferred %i novel entries for token %s:", len(candidates), token)
+    for entry, weight in sorted(candidates.items(), key=lambda x: x[1], reverse=True):
+      L.info("%.4f %s", weight / total_mass * beta, entry)
 
   return lex
 

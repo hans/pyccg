@@ -1,3 +1,4 @@
+import itertools
 import logging
 
 import numpy as np
@@ -17,7 +18,7 @@ L = logging.getLogger(__name__)
 
 class WordLearner(object):
 
-  def __init__(self, lexicon, bootstrap=True,
+  def __init__(self, lexicon, bootstrap=False,
                learning_rate=10.0, beta=3.0, negative_samples=5,
                total_negative_mass=0.1, syntax_prior_smooth=1e-3,
                meaning_prior_smooth=1e-3, bootstrap_alpha=0.25,
@@ -44,7 +45,7 @@ class WordLearner(object):
     self.prune_entries = prune_entries
     self.zero_shot_limit = zero_shot_limit
     self.limit_induction = limit_induction
-    
+
     if update_perceptron_algo not in ["perceptron", "reinforce"]:
       raise ValueError('Unknown update_perceptron algorithm: {}.'.format(update_perceptron_algo))
     self.update_perceptron_algo = update_perceptron_algo
@@ -128,23 +129,59 @@ class WordLearner(object):
     # the supported syntaxes for the novel words (`query_token_syntaxes`).
     #
     # HACK: For now, only induce one word meaning at a time.
-    lex = self.lexicon
-    for query_token in query_tokens:
-      try:
-        lex = augment_lexicon_fn(
-            lex, [query_token], query_token_syntaxes, sentence,
-            self.ontology, model, self._build_likelihood_fns(sentence, model),
-            beta=self.beta,
-            negative_samples=self.negative_samples,
-            total_negative_mass=self.total_negative_mass,
-            **augment_lexicon_args)
-      except NoParsesError:
-        # No way to fix this token. That might be okay -- let's keep going.
-        pass
-      else:
-        # Something got added.
-        if self.limit_induction:
-          break
+    try:
+      lex = augment_lexicon_fn(self.lexicon, query_tokens, query_token_syntaxes,
+                              sentence, self.ontology, model,
+                              self._build_likelihood_fns(sentence, model),
+                              beta=self.beta,
+                              negative_samples=self.negative_samples,
+                              total_negative_mass=self.total_negative_mass,
+                              **augment_lexicon_args)
+    except NoParsesError:
+      L.warn("Failed to induce any novel meanings.")
+      pass
+    # for query_token in query_tokens:
+    #   try:
+    #     lex = augment_lexicon_fn(
+    #         lex, [query_token], query_token_syntaxes, sentence,
+    #         self.ontology, model, self._build_likelihood_fns(sentence, model),
+    #         beta=self.beta,
+    #         negative_samples=self.negative_samples,
+    #         total_negative_mass=self.total_negative_mass,
+    #         **augment_lexicon_args)
+    #   except NoParsesError:
+    #     # No way to fix this token. That might be okay -- let's keep going.
+    #     L.warn("Failed to induce any novel meanings for %s", query_token)
+    #     pass
+    #   else:
+    #     success = True
+    #     # Something got added.
+    #     if self.limit_induction:
+    #       break
+
+    # if not success:
+    #   # No successful parses. Now try enumerating the product of possible
+    #   # words.
+    #   #
+    #   # TODO: more principled to repeat get_candidate_categories now on product
+    #   for query_token_comb in itertools.combinations(query_tokens, 2):
+    #     try:
+    #       syntaxes = {token: query_token_syntaxes[token]
+    #                   for token in query_token_comb}
+    #       lex = augment_lexicon_fn(
+    #           lex, query_token_comb, syntaxes, sentence,
+    #           self.ontology, model, self._build_likelihood_fns(sentence, model),
+    #           beta=self.beta,
+    #           negative_samples=self.negative_samples,
+    #           total_negative_mass=self.total_negative_mass,
+    #           **augment_lexicon_args)
+    #     except NoParsesError:
+    #       L.warn("Failed to induce any novel meanings jointly for %s",
+    #              query_token_comb)
+    #       pass
+    #     else:
+    #       success = True
+    #       # TODO limit induction?
 
     return lex
 
@@ -243,7 +280,7 @@ class WordLearner(object):
     """
 
     augment_lexicon_args = augment_lexicon_args or {}
-    
+
     base_update_perceptron_args = {"update_method": self.update_perceptron_algo}
     base_update_perceptron_args.update(update_perceptron_args or {})
     update_perceptron_args = base_update_perceptron_args
