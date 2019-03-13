@@ -816,8 +816,7 @@ def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
 
 
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
-                      model, likelihood_fns, queue_limit=5,
-                      cache_candidate_exprs=True):
+                      model, likelihood_fns, queue_limit=5):
   """
   Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
   for each of `tokens`.
@@ -841,12 +840,14 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
   Returns:
     queues: A dictionary mapping each query token to a ranked sequence of
-      candidates of the form `(logprob, (category, semantics))`
-    category_parse_results: Multi-level dictionary. First level keys are tokens
-      (elements of `tokens`) for which meanings are being explored. Second
-      level keys are candidate syntactic categories for the corresponding
-      token. Values are a weighted list of sentence parse results.
-    dummy_var: TODO
+      candidates of the form
+      `(logprob, (tokens, candidate_categories, candidate_semantics))`,
+      describing a nonzero-probability novel mapping of a subset `tokens` to
+      syntactic categories `candidate_categories` and meanings
+      `candidate_semantics`. The log-probability value given is
+      `p(meanings, syntaxes | sentence, model)`, under the relevant provided
+      meaning likelihoods and the lexicon's distribution over syntactic forms.
+    dummy_vars: TODO
   """
 
   get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
@@ -859,13 +860,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
   # Enumerate expressions just once! We'll bias the search over the enumerated
   # forms later.
   max_depth = 3
-  if cache_candidate_exprs:
-    candidate_exprs = getattr(predict_zero_shot, "candidate_exprs", None)
-    if candidate_exprs is None:
-      candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
-    predict_zero_shot.candidate_exprs = candidate_exprs
-  else:
-    candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
+  candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
 
   # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
@@ -943,38 +938,31 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
     if candidate_queue.qsize() > 0:
       # We have a result. Quit and don't search at higher depth.
-      return candidate_queue, category_parse_results, dummy_vars
+      return candidate_queue, dummy_vars
 
-  return candidate_queue, category_parse_results, dummy_vars
+  return candidate_queue, dummy_vars
 
 
 def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
-                    sentence, ontology, model,
-                    likelihood_fns,
+                    sentence, ontology, model, likelihood_fns,
                     beta=3.0,
                     **predict_zero_shot_args):
   """
   Augment a lexicon with candidate meanings for a given word using an abstract
-  success function. (The induced meanings for the queried words must yield
-  parses that yield `True` under the `success_fn`, given `model`.)
+  likelihood measure. (The induced meanings for the queried words must yield
+  parses that have nonzero posterior probability, given the lexicon and
+  `model`.)
 
   Candidate entries will be assigned relative weights according to a posterior
   distribution $P(word -> syntax, meaning | sentence, success_fn, lexicon)$. This
   distribution incorporates multiple prior and likelihood terms:
 
-  1. A prior over syntactic categories (derived by inspection of the current
-     lexicon)
-  2. A likelihood over syntactic categories (derived by ranking candidate
-     parses conditioning on each syntactic category)
-  3. A prior over the predicates present in meaning representations,
-     conditioned on syntactic category choice ("syntactic bootstrapping")
-
-  The first two components are accomplished by `get_candidate_categories`,
-  while the third is calculated within this function. (The third can be
-  parametrically disabled using the `bootstrap` argument.)
+  1. A prior over syntactic categories (derived internally, by inspection of
+     the current lexicon)
+  2. A likelihood over meanings (specified by `likelihood_fns`)
 
   Arguments:
-    old_lex: Existing lexicon which needs to be augmented. Do not write
+    old_lex: Existing lexicon which needs to be augmented. Does not write
       in-place.
     query_words: Set of tokens for which we need to search for novel lexical
       entries.
@@ -987,15 +975,15 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
     likelihood_fns: Sequence of functions describing zero-shot likelihoods
       `p(meanings | syntaxes, sentence, model)`. See `predict_zero_shot` for
       more information.
-    beta: Total mass to assign to novel candidate lexical entries. (Mass will
-      be divided according to the one-shot probability distribution induced from
-      the example.)
+    beta: Total mass to assign to novel candidate lexical entries per each
+      wordform. (Mass will be divided according to the posterior distribution
+      given above.)
   """
 
   # Target lexicon to be returned.
   lex = old_lex.clone()
 
-  ranked_candidates, category_parse_results, dummy_vars = \
+  ranked_candidates, dummy_vars = \
       predict_zero_shot(lex, query_tokens, query_token_syntaxes, sentence,
                         ontology, model, likelihood_fns, **predict_zero_shot_args)
 

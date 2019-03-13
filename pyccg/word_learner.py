@@ -168,7 +168,7 @@ class WordLearner(object):
     """
     # Find tokens for which we need to insert lexical entries.
     query_tokens, query_token_syntaxes = self.prepare_lexical_induction(sentence)
-    candidates, _, _ = predict_zero_shot(
+    candidates, _ = predict_zero_shot(
         self.lexicon, query_tokens, query_token_syntaxes, sentence,
         self.ontology, model, self._build_likelihood_fns(sentence, model))
     return query_token_syntaxes, candidates
