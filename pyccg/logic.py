@@ -5,7 +5,7 @@ executing expressions in that language.
 """
 
 from collections import defaultdict
-import copy
+from copy import copy, deepcopy
 import functools
 import inspect
 import itertools
@@ -2414,7 +2414,7 @@ class Ontology(object):
   def typecheck(self, expr, extra_type_signature=None):
     type_signature = self._nltk_type_signature
     if extra_type_signature is not None:
-      type_signature = copy.copy(type_signature)
+      type_signature = copy(type_signature)
       type_signature.update(extra_type_signature)
 
     expr.typecheck(signature=type_signature)
@@ -2610,7 +2610,7 @@ class Ontology(object):
 
 
 def compute_type_raised_semantics(semantics):
-  core = copy.deepcopy(semantics)
+  core = deepcopy(semantics)
   parent = None
   while isinstance(core, LambdaExpression):
     parent = core

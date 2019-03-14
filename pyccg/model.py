@@ -2,6 +2,7 @@
 Model for evaluation of logical forms on CLEVR-like scenes.
 """
 
+from copy import copy
 from copy import deepcopy
 import traceback
 
@@ -16,7 +17,7 @@ class Model(object):
   def __init__(self, scene, ontology):
     self.scene = scene
     self.ontology = ontology
-    self.domain = deepcopy(scene["objects"])
+    self.domain = copy(scene["objects"])
 
   def __str__(self):
     return "%s<%s>" % (self.__class__.__name__, self.scene.name or id(self))
@@ -120,7 +121,7 @@ class Model(object):
       cf = {}
       var = expr.variable.name
       for u in self.domain:
-        assignments = deepcopy(assignments)
+        assignments = copy(assignments)
         assignments[var] = u
 
         try:

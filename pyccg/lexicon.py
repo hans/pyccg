@@ -3,7 +3,7 @@ Tools for updating and expanding lexicons, dealing with logical forms, etc.
 """
 
 from collections import defaultdict, Counter
-import copy
+from copy import deepcopy
 from functools import reduce
 import itertools
 import logging
@@ -143,7 +143,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     """
     Return a clone of the current lexicon instance.
     """
-    ret = copy.deepcopy(self)
+    ret = deepcopy(self)
 
     if not retain_semantics:
       for entry_tokens in ret._entries.values():

@@ -57,7 +57,7 @@ def test_model_induced_functions():
   ]
 
   def test(msg, expr, expected):
-    eq_(model.evaluate(Expression.fromstring(expr)), expected, msg=msg)
+    eq_(model.evaluate(Expression.fromstring(expr)), expected)
 
   for msg, expr, expected in cases:
     yield test, msg, expr, expected
