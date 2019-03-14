@@ -138,7 +138,7 @@ class WordLearner(object):
                               **augment_lexicon_args)
     except NoParsesError:
       L.warn("Failed to induce any novel meanings.")
-      pass
+      return self.lexicon
 
     return lex
 

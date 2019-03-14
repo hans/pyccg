@@ -988,24 +988,25 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
                         ontology, model, likelihood_fns, **predict_zero_shot_args)
 
   candidates = sorted(ranked_candidates.queue, key=lambda item: -item[0])
-  new_entries = defaultdict(Counter)
+  new_entries = {token: Counter() for token in query_tokens}
   # Calculate marginal p(syntax, meaning | sentence) for each token.
   for logp, (tokens, syntaxes, meanings) in candidates:
     for token, syntax, meaning in zip(tokens, syntaxes, meanings):
       new_entries[token][syntax, meaning] += np.exp(logp)
 
+  if all(len(candidates) == 0 for candidates in new_entries.values()):
+    raise NoParsesError("Failed to derive any meanings for tokens %s." % tokens, sentence)
+
   # Construct a new lexicon.
   for token, candidates in new_entries.items():
-    if len(candidates) == 0:
-      raise NoParsesError("Failed to derive any meanings for token %s." % token, sentence)
-
     total_mass = sum(candidates.values())
-    lex._entries[token] = [Token(token, syntax, meaning, weight / total_mass * beta)
-                           for (syntax, meaning), weight in candidates.items()]
+    if len(candidates) > 0:
+      lex._entries[token] = [Token(token, syntax, meaning, weight / total_mass * beta)
+                            for (syntax, meaning), weight in candidates.items()]
 
-    L.info("Inferred %i novel entries for token %s:", len(candidates), token)
-    for entry, weight in sorted(candidates.items(), key=lambda x: x[1], reverse=True):
-      L.info("%.4f %s", weight / total_mass * beta, entry)
+      L.info("Inferred %i novel entries for token %s:", len(candidates), token)
+      for entry, weight in sorted(candidates.items(), key=lambda x: x[1], reverse=True):
+        L.info("%.4f %s", weight / total_mass * beta, entry)
 
   return lex
 
