@@ -659,6 +659,9 @@ class BasicType(Type):
   def __ne__(self, other):
     return not self == other
 
+  def __repr__(self):
+    return "<%s>" % self.name
+
   __hash__ = Type.__hash__
 
   def matches(self, other):
@@ -701,6 +704,9 @@ class ComplexType(Type):
 
   def __ne__(self, other):
     return not self == other
+
+  def __repr__(self):
+    return "<%s>" % ",".join(map(repr, self.flat))
 
   __hash__ = Type.__hash__
 
@@ -1873,7 +1879,14 @@ class TypeSystem(object):
       return type_expr
     if isinstance(type_expr, str):
       return self._types[type_expr]
-    return self.make_function_type(type_expr)
+    if isinstance(type_expr, (tuple, list)):
+      if len(type_expr) == 1:
+        return self[type_expr[0]]
+      elif len(type_expr) > 1:
+        return self.make_function_type(type_expr)
+      else:
+        raise ValueError("Invalid empty type expr %s" % (type_expr,))
+    raise ValueError("Invalid type expr %s" % (type_expr,))
 
   def __iter__(self):
     return iter(self._types.values())
@@ -2213,17 +2226,7 @@ class Ontology(object):
 
   def iter_expressions(self, max_depth=3, **kwargs):
     ret = self._iter_expressions_inner(max_depth, bound_vars=(), **kwargs)
-
-    # Extract lambda arguments to the top level.
-    # NB, this breaks the type record. Should be fine.
-    #
-    # TODO: Currently the program enumeration is generating *both* programs of
-    # the structure `\x y z.(..x..y..z..)` and `..(\x.(..),\y.(..),\z.(..))` --
-    # that is, with broad and narrow scope. The `extract_lambda` operation
-    # reduces a lot of these expressions to be overlapping. It'd be more
-    # efficient to pick a single enumeration strategy and stick with it.
-    ret = itertools.chain.from_iterable(
-        extract_lambda(expr) for expr in ret)
+    ret = [x.normalize() for x in ret]
 
     return ret
 
@@ -2314,53 +2317,40 @@ class Ontology(object):
                 if valid:
                   yield candidate
       elif expr_type == LambdaExpression and max_depth > 1:
-        for bound_var_type in self.observed_argument_types:
-          bound_var = next_bound_var(bound_vars, bound_var_type)
-          subexpr_bound_vars = bound_vars + (bound_var,)
+        if type_request is None or not isinstance(type_request, ComplexType):
+          continue
 
-          subexpr_type_requests = []
-          if type_request is None:
-            subexpr_type_requests = [None]
-          else:
-            # Build new type requests using the flat structure.
-            type_request_flat = type_request.flat
+        for num_args in range(1, len(type_request.flat)):
+          for bound_var_types in itertools.product(self.observed_argument_types, repeat=num_args):
+            # TODO typecheck with type request
 
-            subexpr_type_requests.append(type_request_flat)
+            bound_vars = list(bound_vars)
+            subexpr_bound_vars = []
+            for new_type in bound_var_types:
+              subexpr_bound_vars.append(next_bound_var(bound_vars + subexpr_bound_vars, new_type))
+            all_bound_vars = tuple(bound_vars + subexpr_bound_vars)
 
-            # Basic case: the variable is used as one of the existing
-            # arguments of a target subexpression.
-            subexpr_type_requests.extend([type_request_flat[:i] + type_request_flat[i + 1:]
-                                          for i, type_i in enumerate(type_request_flat)
-                                          if type_i == bound_var_type])
+            if type_request is not None:
+              # TODO strong assumption -- assumes that lambda variables are used first
+              subexpr_type_request_flat = type_request.flat[num_args:]
+              subexpr_type_request = self.types[subexpr_type_request_flat]
+            else:
+              subexpr_type_request = None
 
-            # # The subexpression might take this variable as an additional
-            # # argument in any position. We have to enumerate all possibilities
-            # # -- yikes!
-            # for insertion_point in range(len(type_request)):
-            #   subexpr_type_requests.append(type_request[:insertion_point] + (bound_var_type,)
-            #       + type_request[insertion_point:])
-          # print("\t" * (6-max_depth), "λ %s :: %s" % (bound_var, bound_var_type), type_request, subexpr_type_requests)
-          # print("\t" * (6-max_depth), "Now recursing with max_depth=%i" % (max_depth - 1))
-
-          for subexpr_type_request in subexpr_type_requests:
-            if isinstance(subexpr_type_request, tuple):
-              if not subexpr_type_request:
-                continue
-              else:
-                subexpr_type_request = self.types.make_function_type(subexpr_type_request)
-
-            # TODO(Jiayuan Mao @ 02/26): can I just pass down the `newly_used_constants_expr`?
             results = self._iter_expressions_inner(max_depth=max_depth - 1,
-                                                   bound_vars=subexpr_bound_vars,
+                                                   bound_vars=all_bound_vars,
                                                    type_request=subexpr_type_request,
                                                    function_weights=function_weights,
                                                    use_unused_constants=use_unused_constants,
                                                    newly_used_constants_expr=newly_used_constants_expr)
+
             for expr in results:
-              candidate = LambdaExpression(bound_var, expr)
+              candidate = expr
+              for var in subexpr_bound_vars:
+                candidate = LambdaExpression(var, candidate)
               valid = self._valid_lambda_expr(candidate, bound_vars)
               # print("\t" * (6 - max_depth), "valid lambda %s? %s" % (candidate, valid))
-              if self._valid_lambda_expr(candidate, bound_vars):
+              if valid:
                 # Assign variable types before returning.
                 extra_types = {bound_var.name: bound_var.type
                                for bound_var in subexpr_bound_vars}
@@ -2539,9 +2529,15 @@ class Ontology(object):
       expr = expr.term
     body = expr
 
+    # Find bound variables in body.
+    bound_variables = set(body.variables())
+    # Remove ontology members.
+    bound_variables = set(var for var in bound_variables
+                          if var.name not in self.functions_dict)
+
     # Exclude exprs which do not use all of their bound arguments.
     available_vars = set(bound_args) | set(ctx_bound_vars)
-    if available_vars != set(body.variables()):
+    if available_vars != bound_variables:
       return False
 
     # # Exclude exprs with simplistic bodies.

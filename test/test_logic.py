@@ -94,27 +94,48 @@ def test_iter_expressions():
   from pprint import pprint
 
   cases = [
-    (3, "Reuse of bound variable", (r"\z1.and_(z1,z1)",), ()),
+    (3, "Reuse of bound variable",
+      ((("boolean", "boolean"), r"\z1.and_(z1,z1)",),),
+      ()),
     (3, "Support passing functions as arguments to higher-order functions",
-     (r"\z1.invented_1(foo,z1)",), ()),
+     ((("obj", "boolean"), r"\z1.invented_1(foo,z1)",),),
+     ()),
     (3, "Consider both argument orders",
-     (r"\z1 z2.and_(z1,z2)", r"\z2 z1.and_(z1,z2)"), ()),
+     ((("boolean", "boolean", "boolean"), r"\z2 z1.and_(z1,z2)"),
+      (("boolean", "boolean", "boolean"), r"\z2 z1.and_(z2,z1)")),
+     ()),
     (3, "Consider both argument orders for three-place function",
-     (r"\z1 z2.threeplace(z1,z2,baz)", r"\z2 z1.threeplace(z1,z2,baz)"), ()),
+     ((("obj", "obj", "boolean"), r"\z2 z1.threeplace(z1,z2,baz)"),
+      (("obj", "obj", "boolean"), r"\z2 z1.threeplace(z2,z1,baz)")),
+     ()),
     (3, "Enforce type constraints on higher-order functions",
-     (), (r"\z1.invented_1(not_,z1)",)),
+     (),
+     ((("obj", "boolean"), r"\z1.invented_1(not_,z1)",),)),
     (3, "Enforce type constraints on constants",
-     (), (r"\z1.and_(z1,qux)",)),
+     (),
+     ((("boolean", "boolean"), r"\z1.and_(z1,qux)",),)),
+    (3, "Enforce type constraints on lambda expressions as arguments",
+     (),
+     ((("boolean"), r"and_(\z1.z1,\z1.z1)",),)),
+    (4, "Support passing lambdas as function arguments",
+     ((("boolean"), r"invented_1(\z1.foo(z1),qux)",),),
+     ()),
   ]
 
   def do_case(max_depth, msg, assert_in, assert_not_in):
-    expressions = set(ontology.iter_expressions(max_depth=max_depth))
-    expression_strs = sorted(map(str, expressions))
+    def get_exprs(max_depth, type_request):
+      type_request = ontology.types[type_request]
+      expressions = set(ontology.iter_expressions(max_depth=max_depth,
+                                                  type_request=type_request))
+      expression_strs = sorted(map(str, expressions))
+      return expression_strs
 
-    for expr in assert_in:
-      ok_(expr in expression_strs, "%s: should contain %s" % (msg, expr))
-    for expr in assert_not_in:
-      ok_(expr not in expression_strs, "%s: should not contain %s" % (msg, expr))
+    for type_request, expr in assert_in:
+      ok_(expr in get_exprs(max_depth, type_request),
+          "%s: should contain %s" % (msg, expr))
+    for type_request, expr in assert_not_in:
+      ok_(expr not in get_exprs(max_depth, type_request),
+          "%s: should not contain %s" % (msg, expr))
 
   for max_depth, msg, assert_in, assert_not_in in cases:
     yield do_case, max_depth, msg, assert_in, assert_not_in
@@ -139,7 +160,7 @@ def test_iter_expressions_after_update():
   ontology = _make_simple_mock_ontology()
   ontology.add_functions([ontology.types.new_function("newfunction", ("obj", "boolean"), lambda a: True)])
 
-  expressions = set(ontology.iter_expressions(max_depth=3))
+  expressions = set(ontology.iter_expressions(max_depth=3, type_request=ontology.types["obj", "boolean"]))
   expression_strs = sorted(map(str, expressions))
   assert r"\z1.newfunction(z1)" in expression_strs
 
