@@ -995,7 +995,8 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
       new_entries[token][syntax, meaning] += np.exp(logp)
 
   if all(len(candidates) == 0 for candidates in new_entries.values()):
-    raise NoParsesError("Failed to derive any meanings for tokens %s." % tokens, sentence)
+    raise NoParsesError("Failed to derive any meanings for tokens %s."
+                        % query_tokens, sentence)
 
   # Construct a new lexicon.
   for token, candidates in new_entries.items():
