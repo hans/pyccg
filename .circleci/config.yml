@@ -36,7 +36,7 @@ jobs:
             PYTHONPATH: nltk
           command: |
             . venv/bin/activate
-            nosetests --with-coverage
+            nosetests --with-coverage --cover-xml
 
       - store_artifacts:
           path: test-reports
