@@ -3,6 +3,8 @@
 # Check https://circleci.com/docs/2.0/language-python/ for more details
 #
 version: 2
+orbs:
+  codecov: codecov/codecov@1.0.4
 jobs:
   build:
     docker:
@@ -43,3 +45,6 @@ jobs:
       - store_artifacts:
           path: test-reports
           destination: test-reports
+
+      - codecov/upload:
+          file:
