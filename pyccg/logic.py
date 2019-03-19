@@ -666,8 +666,7 @@ class BasicType(Type):
 
   def matches(self, other):
     ret = other == ANY_TYPE or self == other \
-        or any(my_parent == other_parent for my_parent, other_parent
-               in itertools.product([self] + self.parents, [other] + other.parents))
+        or any(my_parent == other for my_parent in self.parents)
     return ret
 
   def resolve(self, other):
@@ -1857,6 +1856,7 @@ def is_eventvar(expr):
 class TypeSystem(object):
 
   ANY_TYPE = ANY_TYPE
+  ENTITY_TYPE = ENTITY_TYPE
   EVENT_TYPE = EVENT_TYPE
 
   def __init__(self, primitive_types):
@@ -1866,13 +1866,15 @@ class TypeSystem(object):
 
     for primitive_type in primitive_types:
         if isinstance(primitive_type, str):
-            self._types[primitive_type] = BasicType(name=primitive_type)
+            self._types[primitive_type] = BasicType(name=primitive_type,
+                                                    parent=self.ENTITY_TYPE)
         else:
             assert isinstance(primitive_type, BasicType)
             self._types[primitive_type.name] = primitive_type
 
     self._types["?"] = self.ANY_TYPE
     self._types["v"] = self.EVENT_TYPE
+    self._types["e"] = self.ENTITY_TYPE
 
   def __getitem__(self, type_expr):
     if isinstance(type_expr, Type):
@@ -2224,8 +2226,12 @@ class Ontology(object):
   def _prepare(self):
     self._nltk_type_signature = self._make_nltk_type_signature()
 
-  def iter_expressions(self, max_depth=3, **kwargs):
-    ret = self._iter_expressions_inner(max_depth, bound_vars=(), **kwargs)
+  def iter_expressions(self, max_depth=3, type_request=None, **kwargs):
+    if type_request is not None and isinstance(type_request, (list, tuple)):
+      type_request = self.types[type_request]
+    ret = self._iter_expressions_inner(max_depth, bound_vars=(),
+                                       type_request=type_request,
+                                       **kwargs)
     ret = [x.normalize() for x in ret]
 
     return ret
@@ -2277,7 +2283,7 @@ class Ontology(object):
             # If there is a present type request, only consider functions with
             # the correct return type.
             # print("\t" * (6 - max_depth), fn.name, fn.return_type, " // request: ", type_request, bound_vars)
-            if type_request is not None and fn.return_type != type_request:
+            if type_request is not None and not fn.return_type.matches(type_request):
               continue
 
             # Special case: yield fast event queries without recursion.
@@ -2358,7 +2364,7 @@ class Ontology(object):
                 try:
                   # TODO make sure variable names are unique before this happens
                   self.typecheck(candidate, extra_types)
-                except InconsistentTypeHierarchyException:
+                except l.InconsistentTypeHierarchyException:
                   pass
                 else:
                   yield candidate

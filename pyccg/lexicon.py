@@ -20,7 +20,7 @@ from pyccg.combinator import category_search_replace, \
     type_raised_category_search_replace
 from pyccg import logic as l
 from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue, \
-    NoParsesError
+    NoParsesError, tuple_unordered
 
 
 L = logging.getLogger(__name__)
@@ -650,8 +650,7 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
 
 
 def attempt_candidate_parse(lexicon, tokens, candidate_categories,
-                            candidate_expressions, sentence, dummy_vars,
-                            allow_composition=True):
+                            sentence, dummy_vars):
   """
   Attempt to parse a sentence, mapping `tokens` to new candidate
   lexical entries.
@@ -661,7 +660,6 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
     tokens: List of string token(s) to be attempted.
     candidate_categories: List of candidate categories for each token (one per
       token).
-    candidate_expressions: List of candidate expression lists for each token.
     sentence: Sentence which we are attempting to parse.
   """
 
@@ -857,10 +855,20 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
   # for each category. Pre-calculate the necessary associations.
   category_sem_arities = lex.category_semantic_arities(soft_propagate_roots=True)
 
-  # Enumerate expressions just once! We'll bias the search over the enumerated
-  # forms later.
-  max_depth = 3
-  candidate_exprs = set(ontology.iter_expressions(max_depth=max_depth))
+  def iter_expressions_for_arity(arity, max_depth=3):
+    type_request = ontology.types[("e",) * (arity + 1)]
+    return ontology.iter_expressions(max_depth=max_depth,
+                                     type_request=type_request)
+
+  def iter_expressions_for_category(cat):
+    """
+    Generate candidate semantic expressions for a lexical entry with the given
+    syntactic category. (Forms type requests based on known associations
+    between `cat` and semantic expressions.)
+    """
+    return itertools.chain.from_iterable(
+        iter_expressions_for_arity(arity)
+        for arity in category_sem_arities[cat])
 
   # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
@@ -879,29 +887,20 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
           continue
 
         # Attempt to parse with this joint syntactic assignment, and return the
-        # resulting syntactic parses + sentence-level semantic forms,, with
+        # resulting syntactic parses + sentence-level semantic forms, with
         # dummy variables in place of where the candidate expressions will go.
         results = attempt_candidate_parse(lex, token_comb,
                                           syntax_comb,
-                                          candidate_exprs,
                                           sentence,
                                           dummy_vars)
         category_parse_results[syntax_comb] = results
 
         # Now enumerate semantic forms.
-        for expr_comb in itertools.product(candidate_exprs, repeat=len(token_comb)):
-          # Rule out syntax--semantics combinations which have arity
-          # mismatches. TODO rather than arity-checking post-hoc, form a type
-          # request.
-          arity_match = True
-          for expr, categ in zip(expr_comb, syntax_comb):
-            arity_match = arity_match and (get_arity(expr) in category_sem_arities[categ])
-          if not arity_match:
-            continue
-
+        candidate_exprs = tuple(iter_expressions_for_category(cat)
+                                for cat in syntax_comb)
+        for expr_comb in itertools.product(*candidate_exprs):
           # Compute likelihood of this joint syntax--semantics assignment.
           likelihood = 0.0
-          # marginalizing over possible parses ..
           for result in results:
             # Swap in semantic values for each token.
             sentence_semantics = result.label()[0].semantics()
@@ -923,7 +922,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
               # Zero probability. Skip.
               continue
 
-            new_item = (joint_score, (token_comb, syntax_comb, expr_comb))
+            data = tuple_unordered([token_comb, syntax_comb, expr_comb])
+            new_item = (joint_score, data)
             try:
               candidate_queue.put_nowait(new_item)
             except queue.Full:

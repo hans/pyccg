@@ -56,9 +56,12 @@ def _make_simple_mock_ontology():
   return ontology
 
 
-class test_type_match():
+def test_type_match():
   ont = _make_simple_mock_ontology()
-
+  ok_(ont.types["boolean"].matches(ont.types["e"]),
+      "subtypes are recognized in type.matches")
+  ok_(not ont.types["e"].matches(ont.types["boolean"]),
+      "type.matches enforces asymmetric-ness of subtype relation")
   ok_(not ont.constants_dict["baz"].type.matches(ont.constants_dict["qux"].type),
       "'boolean' and 'obj' types should not match")
 
@@ -120,6 +123,12 @@ def test_iter_expressions():
     (4, "Support passing lambdas as function arguments",
      ((("boolean"), r"invented_1(\z1.foo(z1),qux)",),),
      ()),
+    (3, "Support abstract type requests",
+      ((("boolean", "boolean", "boolean"), r"and_"),
+       (("boolean", "boolean"), r"\z1.and_(z1,z1)"),
+       (("e", "e", "e"), r"and_"),
+       (("e", "e"), r"\z1.and_(z1,z1)"),),
+      ()),
   ]
 
   def do_case(max_depth, msg, assert_in, assert_not_in):
@@ -132,10 +141,10 @@ def test_iter_expressions():
 
     for type_request, expr in assert_in:
       ok_(expr in get_exprs(max_depth, type_request),
-          "%s: should contain %s" % (msg, expr))
+          "%s: for type request %s, should contain %s" % (msg, type_request, expr))
     for type_request, expr in assert_not_in:
       ok_(expr not in get_exprs(max_depth, type_request),
-          "%s: should not contain %s" % (msg, expr))
+          "%s: for type request %s, should not contain %s" % (msg, type_request, expr))
 
   for max_depth, msg, assert_in, assert_not_in in cases:
     yield do_case, max_depth, msg, assert_in, assert_not_in

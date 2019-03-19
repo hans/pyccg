@@ -208,3 +208,17 @@ def softmax(arr, axis=-1):
     arr /= arr.sum(axis=axis, keepdims=True)
     return arr
 
+
+class tuple_unordered(tuple):
+  """
+  tuple which blocks ordering ops. good for tuples whose contents are
+  type-strict w.r.t. ordering, but need to be put into a priority queue :)
+  """
+  def __lt__(self, other):
+    return False
+  def __gt__(self, other):
+    return False
+  def __eq__(self, other):
+    return False
+  def __hash__(self):
+    return super().__hash__()
