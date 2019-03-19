@@ -34,6 +34,7 @@ jobs:
           name: run tests
           environment:
             PYTHONPATH: nltk
+            CODECOV_TOKEN: d6b0f8ac-e9b1-4947-96b1-1e8b04697f02
           command: |
             . venv/bin/activate
             nosetests --with-coverage --cover-xml
