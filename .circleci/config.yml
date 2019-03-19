@@ -46,4 +46,5 @@ jobs:
           path: test-reports
           destination: test-reports
 
-      - codecov/upload
+      - codecov/upload:
+          flags: unittest
