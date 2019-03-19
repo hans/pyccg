@@ -46,5 +46,4 @@ jobs:
           path: test-reports
           destination: test-reports
 
-      - codecov/upload:
-          file:
+      - codecov/upload
