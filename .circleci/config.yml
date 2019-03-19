@@ -21,6 +21,11 @@ jobs:
             - v1-dependencies-
 
       - run:
+          name: setup env
+          command: |
+            echo "export PYTHONPATH=nltk" >> $BASH_ENV
+
+      - run:
           name: install dependencies
           command: |
             python3 -m venv venv
