@@ -6,6 +6,8 @@ from copy import copy
 from copy import deepcopy
 import traceback
 
+from frozendict import frozendict
+
 from pyccg.logic import *
 
 
@@ -36,7 +38,7 @@ class Model(object):
     Recursively interpret an expression in the context of some scene.
     """
     if assignments is None:
-      assignments = {}
+      assignments = frozendict()
 
     if isinstance(expr, ApplicationExpression):
       function, arguments = expr.uncurry()
@@ -121,8 +123,7 @@ class Model(object):
       cf = {}
       var = expr.variable.name
       for u in self.domain:
-        assignments = copy(assignments)
-        assignments[var] = u
+        assignments = assignments.copy(**{var: u})
 
         try:
           val = self.satisfy(expr.term, assignments)
