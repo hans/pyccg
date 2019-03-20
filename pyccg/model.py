@@ -33,6 +33,7 @@ class Model(object):
       # print(traceback.format_exc())
       return None
 
+  @functools.lru_cache(maxsize=4096)
   def satisfy(self, expr, assignments=None):
     """
     Recursively interpret an expression in the context of some scene.
