@@ -21,6 +21,12 @@ from six import string_types
 L = logging.getLogger(__name__)
 
 
+TypeException = l.TypeException
+InconsistentTypeHierarchyException = l.InconsistentTypeHierarchyException
+TypeResolutionException = l.TypeResolutionException
+IllegalTypeException = l.IllegalTypeException
+
+
 APP = "APP"
 _counter = nCounter()
 
@@ -1173,7 +1179,7 @@ class ApplicationExpression(Expression):
         try:
             # print("====", self.function, self.argument, self.argument.type)
             self.function._set_type(ComplexType(self.argument.type, other_type), signature)
-        except l.TypeResolutionException:
+        except TypeResolutionException:
             raise TypeException(
                     "The function '%s' is of type '%s' and cannot be applied "
                     "to '%s' of type '%s'.  Its argument must match type '%s'."
@@ -1336,7 +1342,7 @@ class AbstractVariableExpression(Expression):
         for varEx in signature[self.variable.name]:
             resolution = varEx.type.resolve(resolution)
             if not resolution:
-                raise l.InconsistentTypeHierarchyException(self)
+                raise InconsistentTypeHierarchyException(self)
 
         signature[self.variable.name].append(self)
         for varEx in signature[self.variable.name]:
@@ -1394,7 +1400,7 @@ class IndividualVariableExpression(AbstractVariableExpression):
                     raise RuntimeError("Missing declared variable type for %s" % self.variable)
 
         if not other_type.matches(self.variable.type):
-            raise l.TypeResolutionException(self.variable.type, other_type)
+            raise TypeResolutionException(self.variable.type, other_type)
         # if not other_type.matches(ENTITY_TYPE):
         #     raise IllegalTypeException(self, other_type, ENTITY_TYPE)
 
@@ -1455,7 +1461,7 @@ class ConstantExpression(AbstractVariableExpression):
             resolution = varEx.type.resolve(resolution)
             # print("\t\t", resolution)
             if not resolution:
-                raise l.InconsistentTypeHierarchyException(self)
+                raise InconsistentTypeHierarchyException(self)
 
         signature[self.variable.name].append(self)
         for varEx in signature[self.variable.name]:
@@ -1599,7 +1605,7 @@ class LambdaExpression(VariableBinderExpression):
 
         self.term._set_type(other_type.second, signature)
         if not self.type.resolve(other_type):
-            raise l.TypeResolutionException(self, other_type)
+            raise TypeResolutionException(self, other_type)
 
     def __str__(self):
         variables = [self.variable]
@@ -2367,7 +2373,7 @@ class Ontology(object):
                 try:
                   # TODO make sure variable names are unique before this happens
                   self.typecheck(candidate, extra_types)
-                except l.InconsistentTypeHierarchyException:
+                except InconsistentTypeHierarchyException:
                   pass
                 else:
                   yield candidate
