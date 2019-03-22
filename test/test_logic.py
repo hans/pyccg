@@ -278,7 +278,16 @@ def test_typecheck():
 
       (r"\a.ltzero(cmp_pos,a,a,a)",
        {"a": ontology.types["obj"]},
-       None)
+       None),
+
+      (r"and_(\x.ltzero(x),ltzero(one))",
+       {},
+       None),
+
+      (r"and_(\x.ltzero(x),\y.ltzero(y))",
+       {},
+       None),
+
   ]
 
   for expr, extra_signature, expected in exprs:

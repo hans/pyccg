@@ -1592,7 +1592,10 @@ class LambdaExpression(VariableBinderExpression):
             try:
                 self.variable.type = signature[self.variable.name][0].variable.type
             except IndexError:
-                raise
+                self.variable.type = other_type.first
+
+            if self.variable.name not in signature or not signature[self.variable.name]:
+              signature[self.variable.name] = [self]
 
         self.term._set_type(other_type.second, signature)
         if not self.type.resolve(other_type):
