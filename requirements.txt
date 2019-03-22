@@ -4,3 +4,4 @@ nltk==3.4
 nose
 coverage
 frozendict
+tqdm

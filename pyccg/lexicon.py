@@ -14,6 +14,7 @@ import sys
 from nltk.ccg import lexicon as ccg_lexicon
 from nltk.ccg.api import PrimitiveCategory, FunctionalCategory, AbstractCCGCategory
 import numpy as np
+from tqdm import tqdm, trange
 
 from pyccg import chart
 from pyccg.combinator import category_search_replace, \
@@ -876,12 +877,15 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
   category_parse_results = {}
   candidate_queue = None
-  for depth in range(1, len(tokens) + 1):
+  for depth in trange(1, len(tokens) + 1, desc="Depths"):
     candidate_queue = UniquePriorityQueue(maxsize=queue_limit)
 
-    for token_comb in itertools.combinations(tokens, depth):
+    token_combs = list(itertools.combinations(tokens, depth))
+    for token_comb in tqdm(token_combs, desc="Token combinations"):
       token_syntaxes = [list(candidate_syntaxes[token].support) for token in token_comb]
-      for syntax_comb in itertools.product(*token_syntaxes):
+      for syntax_comb in tqdm(itertools.product(*token_syntaxes),
+                              total=np.prod(list(map(len, token_syntaxes))),
+                              desc="Syntax combinations"):
         syntax_weights = [candidate_syntaxes[token][cat] for token, cat in zip(token_comb, syntax_comb)]
         if any(weight == 0 for weight in syntax_weights):
           continue
@@ -896,9 +900,12 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
         category_parse_results[syntax_comb] = results
 
         # Now enumerate semantic forms.
-        candidate_exprs = tuple(iter_expressions_for_category(cat)
+        candidate_exprs = tuple(list(iter_expressions_for_category(cat))
                                 for cat in syntax_comb)
-        for expr_comb in itertools.product(*candidate_exprs):
+        n_expr_combs = np.prod(list(map(len, candidate_exprs)))
+        for expr_comb in tqdm(itertools.product(*candidate_exprs),
+                              total=n_expr_combs,
+                              desc="Expressions"):
           # Compute likelihood of this joint syntax--semantics assignment.
           likelihood = 0.0
           for result in results:
