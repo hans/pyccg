@@ -13,7 +13,7 @@ import logging
 import operator
 import re
 
-from nltk.internals import Counter
+from nltk.internals import Counter as nCounter
 from nltk.sem import logic as l
 from nltk.util import Trie
 from six import string_types
@@ -22,7 +22,7 @@ L = logging.getLogger(__name__)
 
 
 APP = "APP"
-_counter = Counter()
+_counter = nCounter()
 
 class Tokens(object):
     LAMBDA = '\\';     LAMBDA_LIST = ['\\']
