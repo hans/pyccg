@@ -256,8 +256,12 @@ def test_typecheck():
 
   def do_test(expr, extra_signature, expected):
     expr = Expression.fromstring(expr)
-    ontology.typecheck(expr, extra_signature)
-    eq_(expr.type, expected)
+
+    if expected == None:
+      assert_raises(l.TypeException, ontology.typecheck, expr, extra_signature)
+    else:
+      ontology.typecheck(expr, extra_signature)
+      eq_(expr.type, expected)
 
   exprs = [
       (r"ltzero(cmp_pos(ax_x,unique(\x.sphere(x)),unique(\y.cube(y))))",
@@ -271,6 +275,10 @@ def test_typecheck():
       (r"\A b.and_(ltzero(b),A(b))",
        {"A": ontology.types[ontology.types.ANY_TYPE, "boolean"], "b": ontology.types["num"]},
        ontology.types[(ontology.types.ANY_TYPE, "boolean"), "num", "boolean"]),
+
+      (r"\a.ltzero(cmp_pos,a,a,a)",
+       {"a": ontology.types["obj"]},
+       None)
   ]
 
   for expr, extra_signature, expected in exprs:
