@@ -2544,6 +2544,10 @@ class Ontology(object):
       expr = expr.term
     body = expr
 
+    if isinstance(body, IndividualVariableExpression):
+      # Skip pointless identity function \z1.z1, etc.
+      return False
+
     # Find bound variables in body.
     bound_variables = set(body.variables())
     # Remove ontology members.
