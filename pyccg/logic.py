@@ -1828,6 +1828,9 @@ class ExpectedMoreTokensException(LogicalExpressionException):
         LogicalExpressionException.__init__(self, index, 'End of input found.  ' + message)
 
 
+INDVAR_RE = re.compile(r'^[a-df-z]\d*$')
+FUNCVAR_RE = re.compile(r'^[A-Z]\d*$')
+EVENTVAR_RE = re.compile(r'^e\d*$')
 def is_indvar(expr):
     """
     An individual variable must be a single lowercase character other than 'e',
@@ -1837,7 +1840,7 @@ def is_indvar(expr):
     :return: bool True if expr is of the correct form
     """
     assert isinstance(expr, string_types), "%s is not a string" % expr
-    return re.match(r'^[a-df-z]\d*$', expr) is not None
+    return INDVAR_RE.match(expr) is not None
 
 def is_funcvar(expr):
     """
@@ -1848,7 +1851,7 @@ def is_funcvar(expr):
     :return: bool True if expr is of the correct form
     """
     assert isinstance(expr, string_types), "%s is not a string" % expr
-    return re.match(r'^[A-Z]\d*$', expr) is not None
+    return FUNCVAR_RE.match(expr) is not None
 
 def is_eventvar(expr):
     """
@@ -1859,7 +1862,7 @@ def is_eventvar(expr):
     :return: bool True if expr is of the correct form
     """
     assert isinstance(expr, string_types), "%s is not a string" % expr
-    return re.match(r'^e\d*$', expr) is not None
+    return EVENTVAR_RE.match(expr) is not None
 
 
 class TypeSystem(object):
