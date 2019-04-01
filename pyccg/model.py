@@ -2,8 +2,12 @@
 Model for evaluation of logical forms on CLEVR-like scenes.
 """
 
+from collections import Counter, defaultdict
 from copy import copy
 from copy import deepcopy
+import logging
+import functools
+import time
 import traceback
 
 from frozendict import frozendict
@@ -21,19 +25,39 @@ class Model(object):
     self.ontology = ontology
     self.domain = copy(scene["objects"])
 
+    self.eval_times = defaultdict(list)
+    self.eval_counts = Counter()
+
+    # Prepare to cache higher-order functions (object -> bool) -> object.
+    self._property_function_cache = {}
+    if "object" in self.ontology.types and "boolean" in self.ontology.types:
+      target_type = self.ontology.types[("object", "boolean"), "object"]
+      self._property_function_cache = {
+        fn.name: {} for fn in self.ontology.functions
+        if fn.type == target_type
+      }
+    if len(self._property_function_cache) > 0:
+      L.info("Caching results of functions: %s" % ", ".join(self._property_function_cache.keys()))
+
   def __str__(self):
     return "%s<%s>" % (self.__class__.__name__, self.scene.name or id(self))
 
   __repr__ = __str__
 
   def evaluate(self, expr):
+    start = time.time()
     try:
-      return self.satisfy(expr)
+      ret = self.satisfy(expr)
     except:
       # print(traceback.format_exc())
-      return None
+      ret = None
 
-  @functools.lru_cache(maxsize=4096)
+    end = time.time()
+    self.eval_times[expr].append(end - start)
+    self.eval_counts[expr] += 1
+
+    return ret
+
   def satisfy(self, expr, assignments=None):
     """
     Recursively interpret an expression in the context of some scene.
@@ -43,6 +67,11 @@ class Model(object):
 
     if isinstance(expr, ApplicationExpression):
       function, arguments = expr.uncurry()
+
+      if function.variable.name in self._property_function_cache \
+          and tuple(arguments) in self._property_function_cache[function.variable.name]:
+        return self._property_function_cache[function.variable.name]
+
       if isinstance(function, AbstractVariableExpression):
         #It's a predicate expression ("P(x,y)"), so used uncurried arguments
         funval = self.satisfy(function, assignments)
@@ -82,7 +111,12 @@ class Model(object):
             return thunk
 
         if callable(funval):
-          return funval(*argvals)
+          ret = funval(*argvals)
+
+          if function.variable.name in self._property_function_cache:
+            self._property_function_cache[function.variable.name][tuple(arguments)] = ret
+
+          return ret
         return argvals in funval
       else:
         #It must be a lambda expression, so use curried form

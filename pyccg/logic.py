@@ -1902,6 +1902,14 @@ class TypeSystem(object):
         raise ValueError("Invalid empty type expr %s" % (type_expr,))
     raise ValueError("Invalid type expr %s" % (type_expr,))
 
+  def __contains__(self, type_expr):
+    if isinstance(type_expr, str):
+      return type_expr in self._types
+    try:
+      return self[type_expr] and True
+    except:
+      return False
+
   def __iter__(self):
     return iter(self._types.values())
 
