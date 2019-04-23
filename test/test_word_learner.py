@@ -140,7 +140,7 @@ def test_update_distant_two_novel_words():
   learner.lexicon.debug_print()
 
   expected_entries = {
-    "allez": set([("(S/N)", r"\z1.go(z1)"), ("(S/N)", r"go")]),
+    "allez": set([("(S/N)", r"go")]),
     "y": set([("N", r"there")])
   }
   for token, expected in expected_entries.items():

@@ -2570,6 +2570,14 @@ class Ontology(object):
     if available_vars != bound_variables:
       return False
 
+    # Exclude unnecessarily curried expressions, e.g.
+    # `\x.exists(x)` (vs. `exists`)
+    if isinstance(body, ApplicationExpression) \
+        and all(isinstance(a, IndividualVariableExpression) for a in body.args):
+      arg_variables = [a.variable for a in body.args]
+      if arg_variables == bound_args:
+        return False
+
     # # Exclude exprs with simplistic bodies.
     # if isinstance(body, IndividualVariableExpression):
     #   return False
