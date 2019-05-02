@@ -126,6 +126,10 @@ class Lexicon(ccg_lexicon.CCGLexicon):
             else:
               semantics = l.Expression.fromstring(ccg_lexicon.SEMANTICS_RE.match(semantics_str).groups()[0])
 
+              # Assign types.
+              if ontology is not None:
+                ontology.typecheck(semantics)
+
           weight = float(weight[1:-1]) if weight is not None else default_weight
 
           # Word definition

@@ -2,6 +2,8 @@ from nose.tools import *
 
 from pyccg.chart import *
 from pyccg.lexicon import Lexicon
+from pyccg.logic import *
+
 
 def _make_lexicon_with_derived_category():
   lex = Lexicon.fromstring(r"""
@@ -115,3 +117,72 @@ def test_get_derivation_tree():
  N   ((S\N)/N)        N
  |       |            |
 Mary    saw          John""".strip().split("\n")])
+
+
+def test_parse_typechecking():
+  """
+  Chart parser linked to an ontology should (by default) not produce
+  sentence-level LFs which fail typechecks.
+  """
+  types = TypeSystem(["agent", "action", "object"])
+  functions = [
+    types.new_function("see", ("agent", "agent", "action"), lambda a, b: ("see", a, b)),
+    types.new_function("request", ("agent", "object", "action"), lambda a, b: ("request", a, b)),
+  ]
+  constants = [types.new_constant("john", "agent"),
+               types.new_constant("mary", "agent"),
+               types.new_constant("help", "object")]
+  ontology = Ontology(types, functions, constants)
+
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+
+  John => N {john}
+  saw => S\N/N {see}
+  saw => S\N/N {request}
+  requested => S\N/N {request}
+  Mary => N {mary}
+  """, ontology=ontology, include_semantics=True)
+
+  parser = WeightedCCGChartParser(lex, ruleset=ApplicationRuleSet)
+
+  parses = parser.parse("Mary saw John".split())
+  parse_lfs = [str(parse.label()[0].semantics()) for parse in parses]
+  from pprint import pprint
+  pprint(parse_lfs)
+
+  ok_(r"see(john,mary)" in parse_lfs,
+      "Parses of 'Mary saw John' should include typechecking see(john,mary)")
+  ok_(r"request(john,mary)" not in parse_lfs,
+      "Parses of 'Mary saw John' should not include non-typechecking request(john,mary)")
+
+
+def test_parse_typechecking_complex():
+  """
+  Chart parser linked to an ontology should (by default) not produce
+  sentence-level LFs which fail typechecks.
+  """
+  types = TypeSystem(["object", "boolean"])
+  functions = [
+    types.new_function("unique", (("object", "boolean"), "object"), lambda objs: [x for x, v in objs.items() if v][0]),
+    types.new_function("big", ("object", "boolean"), lambda o: o['size'] == "big"),
+    types.new_function("box", ("object", "boolean"), lambda o: o["shape"] == "box"),
+    types.new_function("and_", ("boolean", "boolean", "boolean"), lambda a, b: a and b),
+    types.new_function("apply", (("object", "boolean"), "object", "boolean"), lambda f, o: f(o)),
+  ]
+  constants = []
+  ontology = Ontology(types, functions, constants)
+
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+
+  the => S/N {unique}
+  the => N/N {unique}
+  big => N/N {\f x.and_(apply(f,o),big(x))}
+  box => N {box}
+  """, ontology=ontology, include_semantics=True)
+
+  parser = WeightedCCGChartParser(lex, ruleset=ApplicationRuleSet)
+
+  parses = parser.parse("the the big box".split())
+  eq_(len(parses), 0, "Should disallow non-typechecking parses for 'the the big box'")
