@@ -2597,7 +2597,9 @@ class Ontology(object):
       raise RuntimeError("unknown basic type %s" % (type_expr,))
 
   def _make_nltk_type_signature(self):
-    return {fn.name: fn.type for fn in self.functions}
+    signature = {fn.name: fn.type for fn in self.functions}
+    signature.update({const.name: const.type for const in self.constants})
+    return signature
 
   def as_ec_sexpr(self, expr):
     """
