@@ -87,6 +87,7 @@ class ForwardCombinator(DirectedBinaryCombinator):
     )
 
   def combine(self, left, right):
+    print(type(self._combinator))
     for result in self._combinator.combine(left, right):
       yield result
 
@@ -129,6 +130,21 @@ class UndirectedFunctionApplication(UndirectedBinaryCombinator):
   And the corresponding backwards application rule
   """
 
+  def _typecheck(self, function, argument):
+    fsem, asem = function.semantics(), argument.semantics()
+    if fsem is None or asem is None:
+      return True
+
+    ftype, atype = fsem.type, asem.type
+    if ftype is None or atype is None:
+      return True
+    if not isinstance(ftype, l.ComplexType):
+      return False
+    if not ftype.first == atype:
+      return False
+
+    return True
+
   def can_combine(self, function, argument):
     if not function.categ().is_function():
       return False
@@ -136,9 +152,8 @@ class UndirectedFunctionApplication(UndirectedBinaryCombinator):
     if function.categ().arg().can_unify(argument.categ()) is None:
       return False
 
-    if function.semantics() is not None and argument.semantics() is not None:
-      if not isinstance(function.semantics().type, l.ComplexType):
-        return False
+    if not self._typecheck(function, argument):
+      return False
 
     return True
 
@@ -150,16 +165,17 @@ class UndirectedFunctionApplication(UndirectedBinaryCombinator):
     if subs is None:
       return
 
-    semantics = l.ApplicationExpression(function.semantics(), argument.semantics()).simplify()
-    if self._ontology is not None:
-      # TODO this is really expensive, since it launches a recursive typecheck
-      # at every application node
-      try:
-        self._ontology.typecheck(semantics)
-      except l.InconsistentTypeHierarchyException:
-        return
+    if not self._typecheck(function, argument):
+      return
 
-    yield function.categ().res().substitute(subs), semantics
+    categ = function.categ().res().substitute(subs)
+    fsem, asem = function.semantics(), argument.semantics()
+    if fsem is not None and asem is not None:
+      semantics = l.ApplicationExpression(function.semantics(), argument.semantics()).simplify()
+    else:
+      semantics = None
+
+    yield categ, semantics
 
   def __str__(self):
     return ''
@@ -197,6 +213,11 @@ class UndirectedComposition(UndirectedBinaryCombinator):
       return False
     if function.categ().dir().can_compose() and argument.categ().dir().can_compose():
       return not function.categ().arg().can_unify(argument.categ().res()) is None
+
+    if not isinstance(argument.semantics(), l.LambdaExpression):
+      return False
+    # TODO typecheck
+
     return False
 
   def combine(self, function, argument):
@@ -205,11 +226,18 @@ class UndirectedComposition(UndirectedBinaryCombinator):
     if function.categ().dir().can_compose() and argument.categ().dir().can_compose():
       subs = function.categ().arg().can_unify(argument.categ().res())
       if subs is not None:
-        yield FunctionalCategory(
-          function.categ().res().substitute(subs),
-          argument.categ().arg().substitute(subs),
-          argument.categ().dir(),
-        )
+        categ = FunctionalCategory(
+            function.categ().res().substitute(subs),
+            argument.categ().arg().substitute(subs),
+            argument.categ().dir())
+
+        fsem, asem = function.semantics(), argument.semantics()
+        if fsem is not None and asem is not None:
+          semantics = l.LambdaExpression(asem.variable, l.ApplicationExpression(fsem, asem.term).simplify())
+        else:
+          semantics = None
+
+        yield categ, semantics
 
   def __str__(self):
     return 'B'
@@ -271,15 +299,32 @@ class UndirectedSubstitution(UndirectedBinaryCombinator):
 
     if not (function.categ().dir().can_compose() and argument.categ().dir().can_compose()):
       return False
+
+    fsem, asem = function.semantics(), argument.semantics()
+    # F must be a lambda expression with 2 arguments
+    if not (isinstance(fsem, l.LambdaExpression) and isinstance(fsem.term, l.LambdaExpression)):
+      return False
+    # A must be a lambda expression
+    if not isinstance(asem, l.LambdaExpression):
+      return False
+
     return (function.categ().res().arg() == argument.categ().res()) and (
       function.categ().arg() == argument.categ().arg()
     )
 
   def combine(self, function, argument):
     if self.can_combine(function, argument):
-      yield FunctionalCategory(
+      categ = FunctionalCategory(
         function.categ().res().res(), argument.categ().arg(), argument.categ().dir()
       )
+
+      # TODO type-inference
+      fsem, asem = function.semantics(), argument.semantics()
+      new_arg = l.ApplicationExpression(asem, l.VariableExpression(fsem.variable)).simplify()
+      new_term = l.ApplicationExpression(fsem.term, new_arg).simplify()
+      semantics = l.LambdaExpression(fsem.variable, new_term)
+
+      yield categ, semantics
 
   def __str__(self):
     return 'S'
@@ -350,9 +395,12 @@ class UndirectedTypeRaise(UndirectedBinaryCombinator):
     subs = function.categ().can_unify(arg.arg())
     if subs is not None:
       xcat = arg.res().substitute(subs)
-      yield FunctionalCategory(
+      categ = FunctionalCategory(
         xcat, FunctionalCategory(xcat, function.categ(), arg.dir()), -(arg.dir())
       )
+
+      # TODO semantics
+      yield categ, None
 
   def __str__(self):
     return 'T'

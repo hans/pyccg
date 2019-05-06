@@ -178,7 +178,7 @@ def test_parse_typechecking_complex():
 
   the => S/N {unique}
   the => N/N {unique}
-  big => N/N {\f x.and_(apply(f,o),big(x))}
+  big => N/N {\f x.and_(apply(f,x),big(x))}
   box => N {box}
   """, ontology=ontology, include_semantics=True)
 

@@ -6,8 +6,8 @@ from nltk.parse.chart import AbstractChartRule, Chart, EdgeI
 from nltk.tree import Tree
 import numpy as np
 
+from pyccg import Token
 from pyccg.combinator import *
-from pyccg.lexicon import Token
 from pyccg.logic import *
 
 
@@ -119,8 +119,9 @@ class ForwardTypeRaiseRule(CCGChartRule):
         if not (left_edge.end() == right_edge.start()):
             return
 
-        for res in self._combinator.combine(left_edge.categ(), right_edge.categ()):
-            new_edge = CCGEdge(span=left_edge.span(),categ=res,rule=self._combinator)
+        for categ, semantics in self._combinator.combine(left_edge, right_edge):
+            new_edge = CCGEdge(span=left_edge.span(), categ=categ, semantics=semantics,
+                               rule=self._combinator)
             if chart.insert(new_edge,(left_edge,)):
                 yield new_edge
 
@@ -139,8 +140,9 @@ class BackwardTypeRaiseRule(CCGChartRule):
         if not (left_edge.end() == right_edge.start()):
             return
 
-        for res in self._combinator.combine(left_edge.categ(), right_edge.categ()):
-            new_edge = CCGEdge(span=right_edge.span(),categ=res,rule=self._combinator)
+        for categ, semantics in self._combinator.combine(left_edge, right_edge):
+            new_edge = CCGEdge(span=right_edge.span(), categ=categ, semantics=semantics,
+                               rule=self._combinator)
             if chart.insert(new_edge,(right_edge,)):
                 yield new_edge
 

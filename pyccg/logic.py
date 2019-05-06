@@ -1447,9 +1447,6 @@ class ConstantExpression(AbstractVariableExpression):
         if signature is None:
             signature = defaultdict(list)
 
-        # print(self, other_type)
-        if r"\a b.ltzero" in str(self):
-            raise RuntimeError()
         resolution = ANY_TYPE
         if other_type != ANY_TYPE:
             resolution = other_type
@@ -1582,8 +1579,8 @@ class VariableBinderExpression(Expression):
 class LambdaExpression(VariableBinderExpression):
     @property
     def type(self):
-        return ComplexType(self.variable.type,
-                           self.term.type)
+        return ComplexType(self.variable.type or ANY_TYPE,
+                           self.term.type or ANY_TYPE)
 
     def _set_type(self, other_type=ANY_TYPE, signature=None):
         """:see Expression._set_type()"""
