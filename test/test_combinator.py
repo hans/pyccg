@@ -28,6 +28,8 @@ def _make_mock_lexicon():
     def => N/N {\b.not_(b)}
     qrs => N/N {\a.enlarge(a)}
     tuv => N/N {\b.enlarge(b)}
+    twoarg => N/N/N {\a b.twoplace(a,b)}
+    doggish => N/N {\x.dog(x)}
     dog => N {dog}
 
     # NB, won't typecheck
@@ -102,3 +104,15 @@ def test_forward_composition():
 
   for left, right, allowed, categ, semantics in cases:
     yield _test_case_binary, ForwardComposition, lex, left, right, allowed, categ, semantics
+
+
+def test_forward_substitution():
+  lex = _make_mock_lexicon()
+
+  cases = [
+    ("twoarg", "doggish", True, "(N/N)", r"\z1.twoplace(z1,dog(z1))"),
+  ]
+
+  for left, right, allowed, categ, semantics in cases:
+    yield _test_case_binary, ForwardSubstitution, lex, left, right, allowed, categ, semantics
+
