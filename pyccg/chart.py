@@ -198,30 +198,6 @@ class CCGChart(Chart):
     return trees
 
 
-def compute_semantics(children, edge):
-  if children[0].label()[0].semantics() is None:
-    return None
-
-  if len(children) is 2:
-    if isinstance(edge.rule(), BackwardCombinator):
-      children = [children[1],children[0]]
-
-    combinator = edge.rule()._combinator
-    function = children[0].label()[0].semantics()
-    argument = children[1].label()[0].semantics()
-
-    if isinstance(combinator, UndirectedFunctionApplication):
-      return compute_function_semantics(function, argument)
-    elif isinstance(combinator, UndirectedComposition):
-      return compute_composition_semantics(function, argument)
-    elif isinstance(combinator, UndirectedSubstitution):
-      return compute_substitution_semantics(function, argument)
-    else:
-      raise AssertionError('Unsupported combinator \'' + combinator + '\'')
-  else:
-    return compute_type_raised_semantics(children[0].label()[0].semantics())
-
-
 class WeightedCCGChartParser(nchart.CCGChartParser):
   """
   CCG chart parser building off of the basic NLTK parser.
