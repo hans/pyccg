@@ -87,7 +87,6 @@ class ForwardCombinator(DirectedBinaryCombinator):
     )
 
   def combine(self, left, right):
-    print(type(self._combinator))
     for result in self._combinator.combine(left, right):
       yield result
 
@@ -140,7 +139,7 @@ class UndirectedFunctionApplication(UndirectedBinaryCombinator):
       return True
     if not isinstance(ftype, l.ComplexType):
       return False
-    if not ftype.first == atype:
+    if not atype.matches(ftype.first):
       return False
 
     return True
