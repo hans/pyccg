@@ -191,7 +191,7 @@ class CCGChart(Chart):
       child_choices = [self._trees(cp, complete, memo, tree_class)
                        for cp in cpl]
       for children in itertools.product(*child_choices):
-        lhs = (Token(self._tokens[edge.start():edge.end()], edge.lhs(), compute_semantics(children, edge)), str(edge.rule()))
+        lhs = (Token(self._tokens[edge.start():edge.end()], edge.lhs(), edge.semantics()), str(edge.rule()))
         trees.append(tree_class(lhs, children))
 
     memo[edge] = trees
