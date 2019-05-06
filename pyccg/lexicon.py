@@ -17,8 +17,7 @@ import numpy as np
 from tqdm import tqdm, trange
 
 from pyccg import chart, Token
-from pyccg.combinator import category_search_replace, \
-    type_raised_category_search_replace
+from pyccg.combinator import category_search_replace
 from pyccg import logic as l
 from pyccg.util import ConditionalDistribution, Distribution, UniquePriorityQueue, \
     NoParsesError, tuple_unordered
