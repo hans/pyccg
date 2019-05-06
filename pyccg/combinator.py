@@ -211,13 +211,18 @@ class UndirectedComposition(UndirectedBinaryCombinator):
     if not (function.categ().is_function() and argument.categ().is_function()):
       return False
     if function.categ().dir().can_compose() and argument.categ().dir().can_compose():
-      return not function.categ().arg().can_unify(argument.categ().res()) is None
+      if function.categ().arg().can_unify(argument.categ().res()) is None:
+        return False
 
-    if not isinstance(argument.semantics(), l.LambdaExpression):
-      return False
-    # TODO typecheck
+    fsem, asem = function.semantics(), argument.semantics()
+    if fsem is not None and asem is not None:
+      if not isinstance(argument.semantics(), l.LambdaExpression):
+        return False
 
-    return False
+      if not asem.term.type.matches(fsem.type.first):
+        return False
+
+    return True
 
   def combine(self, function, argument):
     if not (function.categ().is_function() and argument.categ().is_function()):
