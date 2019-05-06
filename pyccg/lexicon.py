@@ -128,7 +128,13 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
               # Assign types.
               if ontology is not None:
-                ontology.typecheck(semantics)
+                extra_dict = {}
+                for variable in semantics.bound():
+                  var_type = ontology.infer_type(semantics, variable.name)
+                  variable.type = var_type
+                  extra_dict[variable.name] = var_type
+
+                ontology.typecheck(semantics, extra_dict)
 
           weight = float(weight[1:-1]) if weight is not None else default_weight
 

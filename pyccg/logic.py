@@ -1089,6 +1089,13 @@ class Expression(SubstituteBindingsI):
         return self.visit(lambda e: e.free(),
                           lambda parts: functools.reduce(operator.or_, parts, set()))
 
+    def bound(self):
+        """
+        Return a set of all the bound variables.
+        """
+        return self.visit(lambda e: e.bound(),
+                          lambda parts: functools.reduce(operator.concat, parts, []))
+
     def constants(self):
         """
         Return a set of individual constants (non-predicates).
@@ -1468,6 +1475,9 @@ class ConstantExpression(AbstractVariableExpression):
         """:see: Expression.free()"""
         return set()
 
+    def bound(self):
+        return []
+
     def constants(self):
         """:see: Expression.constants()"""
         return set([self.variable])
@@ -1539,6 +1549,9 @@ class VariableBinderExpression(Expression):
     def free(self):
         """:see: Expression.free()"""
         return self.term.free() - set([self.variable])
+
+    def bound(self):
+        return [self.variable]
 
     def findtype(self, variable):
         """:see Expression.findtype()"""
