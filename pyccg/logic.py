@@ -2668,12 +2668,17 @@ class Ontology(object):
     """
     fn = self.functions_dict[function]
     variables = [unique_variable(type=type) for type in fn.arg_types]
-    # TODO make sure applicationexpression is properly typed
-    core = make_application(function, [IndividualVariableExpression(v) for v in variables])
-    ret = core
-    for variable in variables[::-1]:
-      ret = LambdaExpression(variable, ret)
-    return ret
+
+    if len(variables) > 0:
+      # TODO make sure applicationexpression is properly typed
+      core = make_application(function, [IndividualVariableExpression(v) for v in variables])
+      print(core)
+      ret = core
+      for variable in variables[::-1]:
+        ret = LambdaExpression(variable, ret)
+      return ret.normalize()
+
+    return ConstantExpression(Variable(function))
 
   def unwrap_base_functions(self, expr):
     """
@@ -2688,8 +2693,8 @@ class Ontology(object):
         expr = LambdaExpression(expr.variable, expr.term)
     elif isinstance(expr, ApplicationExpression):
       expr.argument = self.unwrap_base_functions(expr.argument)
-      # TODO won't work for multi-arg expressions
-      # expr.function = self.unwrap_base_functions(expr.function)
+      if isinstance(expr.function, ApplicationExpression):
+        expr.function = self.unwrap_base_functions(expr.function)
 
     return expr
 

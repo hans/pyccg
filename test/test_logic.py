@@ -333,3 +333,5 @@ def test_unwrap_base_functions():
 
   eq_(str(ontology.unwrap_base_functions(Expression.fromstring(r"unique(sphere)"))),
       r"unique(\z1.sphere(z1))")
+  eq_(str(ontology.unwrap_base_functions(Expression.fromstring(r"cmp_pos(ax_x,unique(sphere),unique(cube))"))),
+      r"cmp_pos(ax_x,unique(\z1.sphere(z1)),unique(\z1.cube(z1)))")
