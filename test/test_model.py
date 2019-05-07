@@ -12,12 +12,12 @@ def _make_mock_ontology():
     assert len(true_xs) == 1
     return true_xs[0]
 
-  types = TypeSystem(["obj", "boolean"])
+  types = TypeSystem(["object", "boolean"])
   functions = [
-    types.new_function("left_of", ("obj", "obj", "boolean"), lambda a, b: a["x"] < b["x"]),
-    types.new_function("unique", (("obj", "boolean"), "obj"), fn_unique),
-    types.new_function("cube", ("obj", "boolean"), lambda x: x["shape"] == "cube"),
-    types.new_function("sphere", ("obj", "boolean"), lambda x: x["shape"] == "sphere"),
+    types.new_function("left_of", ("object", "object", "boolean"), lambda a, b: a["x"] < b["x"]),
+    types.new_function("unique", (("object", "boolean"), "object"), fn_unique),
+    types.new_function("cube", ("object", "boolean"), lambda x: x["shape"] == "cube"),
+    types.new_function("sphere", ("object", "boolean"), lambda x: x["shape"] == "sphere"),
 
     types.new_function("and_", ("boolean", "boolean", "boolean"), lambda x, y: x and y),
   ]
@@ -137,3 +137,25 @@ def test_nested_lambda():
       scene["objects"][0])
   eq_(model.evaluate(Expression.fromstring(r"sphere(unique(\x.left_of(x,unique(\y.cube(y)))))")),
       True)
+
+
+def test_property_function_cache():
+  ontology = _make_mock_ontology()
+  scene = {"objects": [
+    frozendict(x=3, shape="sphere"),
+    frozendict(x=4, shape="cube"),
+  ]}
+  model = Model(scene, ontology)
+
+  ok_("unique" in model._property_function_cache,
+      "Should prepare to cache `unique` function")
+  eq_(len(model._property_function_cache["unique"]), 0)
+
+  expr = Expression.fromstring(r"unique(\x.sphere(x))")
+  expected = scene["objects"][0]
+
+  eq_(model.evaluate(expr), expected)
+  ok_(len(model._property_function_cache["unique"]) > 0,
+      "Cache should be populated after call")
+
+  eq_(model.evaluate(expr), expected, "Cached evaluation returns the same value")

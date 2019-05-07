@@ -29,6 +29,7 @@ class Model(object):
     self.eval_counts = Counter()
 
     # Prepare to cache higher-order functions (object -> bool) -> object.
+    # TODO generalize / allow customization
     self._property_function_cache = {}
     if "object" in self.ontology.types and "boolean" in self.ontology.types:
       target_type = self.ontology.types[("object", "boolean"), "object"]
@@ -70,7 +71,7 @@ class Model(object):
 
       if function.variable.name in self._property_function_cache \
           and tuple(arguments) in self._property_function_cache[function.variable.name]:
-        return self._property_function_cache[function.variable.name]
+        return self._property_function_cache[function.variable.name][tuple(arguments)]
 
       if isinstance(function, AbstractVariableExpression):
         #It's a predicate expression ("P(x,y)"), so used uncurried arguments
