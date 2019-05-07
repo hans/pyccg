@@ -6,6 +6,29 @@ from pyccg.logic import Expression, Ontology, TypeSystem, Function
 from pyccg.model import *
 
 
+def _make_mock_ontology():
+  def fn_unique(xs):
+    true_xs = [x for x, matches in xs.items() if matches]
+    assert len(true_xs) == 1
+    return true_xs[0]
+
+  types = TypeSystem(["obj", "boolean"])
+  functions = [
+    types.new_function("left_of", ("obj", "obj", "boolean"), lambda a, b: a["x"] < b["x"]),
+    types.new_function("unique", (("obj", "boolean"), "obj"), fn_unique),
+    types.new_function("cube", ("obj", "boolean"), lambda x: x["shape"] == "cube"),
+    types.new_function("sphere", ("obj", "boolean"), lambda x: x["shape"] == "sphere"),
+
+    types.new_function("and_", ("boolean", "boolean", "boolean"), lambda x, y: x and y),
+  ]
+
+  constants = []
+
+  ontology = Ontology(types, functions, constants)
+
+  return ontology
+
+
 def test_model_constants():
   """
   Test evaluating with constant values.
@@ -96,3 +119,21 @@ def test_model_stored_partial_application():
   model = Model(scene, ontology)
 
   eq_(model.evaluate(Expression.fromstring(r"partial(obj1)")), "obj1")
+
+
+def test_nested_lambda():
+  """
+  Test evaluation of nested lambda expressions.
+  """
+  ontology = _make_mock_ontology()
+
+  scene = {"objects": [
+    frozendict(x=3, shape="sphere"),
+    frozendict(x=4, shape="cube"),
+  ]}
+  model = Model(scene, ontology)
+
+  eq_(model.evaluate(Expression.fromstring(r"unique(\x.left_of(x,unique(\y.cube(y))))")),
+      scene["objects"][0])
+  eq_(model.evaluate(Expression.fromstring(r"sphere(unique(\x.left_of(x,unique(\y.cube(y)))))")),
+      True)
