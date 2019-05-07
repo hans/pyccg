@@ -1367,6 +1367,9 @@ class AbstractVariableExpression(Expression):
         """:see: Expression.predicates()"""
         return set()
 
+    def bound(self):
+        return []
+
     def __eq__(self, other):
         """Allow equality between instances of ``AbstractVariableExpression``
         subtypes."""
@@ -1551,7 +1554,7 @@ class VariableBinderExpression(Expression):
         return self.term.free() - set([self.variable])
 
     def bound(self):
-        return [self.variable]
+        return self.term.bound() + [self.variable]
 
     def findtype(self, variable):
         """:see Expression.findtype()"""

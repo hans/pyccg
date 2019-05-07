@@ -313,3 +313,10 @@ def test_infer_type():
 
   for expr, query_variable, expected_type in cases:
     yield do_test, expr, query_variable, expected_type
+
+
+def test_expression_bound():
+  eq_(set(x.name for x in Expression.fromstring(r"\x.foo(x)").bound()),
+      {"x"})
+  eq_(set(x.name for x in Expression.fromstring(r"\x y.foo(x,y)").bound()),
+      {"x", "y"})
