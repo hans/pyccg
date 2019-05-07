@@ -2672,7 +2672,6 @@ class Ontology(object):
     if len(variables) > 0:
       # TODO make sure applicationexpression is properly typed
       core = make_application(function, [IndividualVariableExpression(v) for v in variables])
-      print(core)
       ret = core
       for variable in variables[::-1]:
         ret = LambdaExpression(variable, ret)
@@ -2684,10 +2683,11 @@ class Ontology(object):
     """
     Given an Expression, unwrap all functions in base form.
     """
-    # todo extract the more general replacement logic here
-    if isinstance(expr, ConstantExpression) and expr.variable.name in self.functions_dict:
+    # TODO extract the more general replacement logic here
+    if isinstance(expr, (ConstantExpression, FunctionVariableExpression)) \
+        and expr.variable.name in self.functions_dict:
       return self.unwrap_function(expr.variable.name)
-    if isinstance(expr, LambdaExpression):
+    elif isinstance(expr, LambdaExpression):
       new = self.unwrap_base_functions(expr.term)
       if new != expr.term:
         expr = LambdaExpression(expr.variable, expr.term)
