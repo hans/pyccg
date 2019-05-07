@@ -4,6 +4,7 @@ semantic forms.
 """
 
 from abc import ABCMeta, abstractmethod
+from copy import deepcopy
 import itertools
 
 from nltk.ccg.api import FunctionalCategory, PrimitiveCategory
@@ -403,8 +404,28 @@ class UndirectedTypeRaise(UndirectedBinaryCombinator):
         xcat, FunctionalCategory(xcat, function.categ(), arg.dir()), -(arg.dir())
       )
 
-      # TODO semantics
-      yield categ, None
+      # compute semantics
+      semantics = None
+      if function.semantics() is not None:
+        core = deepcopy(function.semantics())
+        parent = None
+        while isinstance(core, l.LambdaExpression):
+          parent = core
+          core = core.term
+
+        var = l.Variable("F")
+        while var in core.free():
+          var = l.unique_variable(pattern=var)
+        core = l.ApplicationExpression(l.FunctionVariableExpression(var), core)
+
+        if parent is not None:
+          parent.term = core
+        else:
+          semantics = core
+
+        semantics = l.LambdaExpression(var, semantics)
+
+      yield categ, semantics
 
   def __str__(self):
     return 'T'
