@@ -2482,7 +2482,7 @@ class Ontology(object):
             function_type = extra_types[fn_name]
           except KeyError:
             # No function information available. Ditch.
-            return self.types.ANY_TYPE
+            return ANY_TYPE
 
         for i, arg in enumerate(node.args):
           visitor(arg)
@@ -2493,19 +2493,21 @@ class Ontology(object):
             apparent_types.add(function_type.flat[i])
           elif isinstance(arg, ApplicationExpression) and isinstance(arg.pred, FunctionVariableExpression) \
               and arg.pred.variable.name == variable_name:
-            arg_types = ((self.types.ANY_TYPE,) * len(arg.args))
+            arg_types = ((ANY_TYPE,) * len(arg.args))
             apparent_types.add(arg_types + (function_type.flat[i],))
       elif isinstance(node, LambdaExpression):
         visitor(node.term)
 
     visitor(expr)
     if len(apparent_types) > 1:
-      if len(apparent_types) == 2 and self.types.ANY_TYPE in apparent_types:
+      if len(apparent_types) == 2 and ANY_TYPE in apparent_types:
         # Good, just remove the AnyType.
-        apparent_types.remove(self.types.ANY_TYPE)
+        apparent_types.remove(ANY_TYPE)
       else:
         # TODO check type compatibility
         raise NotImplementedError("Multiple apparent types: %s" % apparent_types)
+    elif len(apparent_types) == 0:
+      return ANY_TYPE
 
     type_ret = next(iter(apparent_types))
     return self.types[type_ret]
