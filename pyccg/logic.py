@@ -592,7 +592,7 @@ class Variable(object):
     return "Variable('%s')" % self.name
 
 
-def unique_variable(pattern=None, ignore=None):
+def unique_variable(pattern=None, ignore=None, type=None):
     """
     Return a new, unique variable.
 
@@ -614,9 +614,9 @@ def unique_variable(pattern=None, ignore=None):
     else:
         prefix = 'z'
 
-    v = Variable("%s%s" % (prefix, _counter.get()))
+    v = Variable("%s%s" % (prefix, _counter.get()), type=type)
     while ignore is not None and v in ignore:
-        v = Variable("%s%s" % (prefix, _counter.get()))
+        v = Variable("%s%s" % (prefix, _counter.get()), type=type)
     return v
 
 def skolem_function(univ_scope=None):
@@ -2658,6 +2658,40 @@ class Ontology(object):
         raise ValueError("un-handled expression component %r" % expr)
 
     return inner(expr, [])
+
+  def unwrap_function(self, function):
+    """
+    Given a function of this ontology, return an "unwrapped" `LambdaExpression`
+    referencing that function. e.g.
+
+        unwrap_function("sphere") => \\x.sphere(x)
+    """
+    fn = self.functions_dict[function]
+    variables = [unique_variable(type=type) for type in fn.arg_types]
+    # TODO make sure applicationexpression is properly typed
+    core = make_application(function, [IndividualVariableExpression(v) for v in variables])
+    ret = core
+    for variable in variables[::-1]:
+      ret = LambdaExpression(variable, ret)
+    return ret
+
+  def unwrap_base_functions(self, expr):
+    """
+    Given an Expression, unwrap all functions in base form.
+    """
+    # todo extract the more general replacement logic here
+    if isinstance(expr, ConstantExpression) and expr.variable.name in self.functions_dict:
+      return self.unwrap_function(expr.variable.name)
+    if isinstance(expr, LambdaExpression):
+      new = self.unwrap_base_functions(expr.term)
+      if new != expr.term:
+        expr = LambdaExpression(expr.variable, expr.term)
+    elif isinstance(expr, ApplicationExpression):
+      expr.argument = self.unwrap_base_functions(expr.argument)
+      # TODO won't work for multi-arg expressions
+      # expr.function = self.unwrap_base_functions(expr.function)
+
+    return expr
 
 
 def compute_type_raised_semantics(semantics):

@@ -320,3 +320,16 @@ def test_expression_bound():
       {"x"})
   eq_(set(x.name for x in Expression.fromstring(r"\x y.foo(x,y)").bound()),
       {"x", "y"})
+
+
+def test_unwrap_function():
+  ontology = _make_mock_ontology()
+
+  eq_(str(ontology.unwrap_function("sphere")), r"\z1.sphere(z1)")
+
+
+def test_unwrap_base_functions():
+  ontology = _make_mock_ontology()
+
+  eq_(str(ontology.unwrap_base_functions(Expression.fromstring(r"unique(sphere)"))),
+      r"unique(\z1.sphere(z1))")

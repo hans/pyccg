@@ -139,6 +139,21 @@ def test_nested_lambda():
       True)
 
 
+def test_base_function():
+  """
+  Support domain enumeration when a function appears as a constant in "base"
+  form.
+  """
+  ontology = _make_mock_ontology()
+  scene = {"objects": [
+    frozendict(x=3, shape="sphere"),
+    frozendict(x=4, shape="cube"),
+  ]}
+  model = Model(scene, ontology)
+
+  eq_(model.evaluate(Expression.fromstring(r"unique(cube)")), scene["objects"][1])
+
+
 def test_property_function_cache():
   ontology = _make_mock_ontology()
   scene = {"objects": [

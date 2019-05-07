@@ -46,6 +46,9 @@ class Model(object):
   __repr__ = __str__
 
   def evaluate(self, expr):
+    # Unwrap base-form ontology functions.
+    expr = self.ontology.unwrap_base_functions(expr)
+
     start = time.time()
     try:
       ret = self.satisfy(expr)
