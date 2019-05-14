@@ -127,13 +127,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
               # Assign types.
               if ontology is not None:
-                extra_dict = {}
-                for variable in semantics.bound():
-                  var_type = ontology.infer_type(semantics, variable.name)
-                  variable.type = var_type
-                  extra_dict[variable.name] = var_type
-
-                ontology.typecheck(semantics, extra_dict)
+                ontology.typecheck(semantics)
 
           weight = float(weight[1:-1]) if weight is not None else default_weight
 
@@ -142,6 +136,29 @@ class Lexicon(ccg_lexicon.CCGLexicon):
           entries[ident].append(Token(ident, cat, semantics, weight=weight))
     return cls(starts, primitives, families, entries,
                ontology=ontology)
+
+  def get_entries(self, word):
+    return self._entries[word]
+
+  def set_entries(self, word, entries):
+    self._entries[word] = []
+    for entry in entries:
+      self.add_entry(word, entry)
+
+  def add_entry(self, word, category, semantics=None, weight=None):
+    """
+    Add a `Token` entry for the wordform `word`.
+
+    Arguments:
+      word: String wordform
+      token: `Token` instance
+    """
+    # Typecheck and assign types in semantic representation.
+    if semantics is not None and self.ontology is not None:
+      self.ontology.typecheck(semantics)
+
+    token = Token(word, category, semantics=semantics, weight=weight)
+    self._entries[word].append(token)
 
   def __eq__(self, other):
     return isinstance(other, Lexicon) and self._starts == other._starts \

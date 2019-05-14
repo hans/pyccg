@@ -2446,6 +2446,13 @@ class Ontology(object):
       type_signature = copy(type_signature)
       type_signature.update(extra_type_signature)
 
+    # First infer types of bound variables.
+    # TODO assumes variable names are unique
+    for variable in expr.bound():
+      var_type = self.infer_type(expr, variable.name)
+      variable.type = var_type
+      type_signature[variable.name] = var_type
+
     expr.typecheck(signature=type_signature)
 
   def register_expressions(self, expressions):

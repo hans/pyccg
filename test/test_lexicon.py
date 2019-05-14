@@ -5,7 +5,6 @@ from pyccg import logic as l
 from pyccg.chart import WeightedCCGChartParser
 
 from nltk.ccg.lexicon import FunctionalCategory, PrimitiveCategory, Direction
-from nltk.sem.logic import Expression
 
 
 def test_filter_lexicon_entry():
@@ -309,10 +308,83 @@ def test_attempt_candidate_parse():
   # TODO this doesn't actually require composition .. get one which does
 
   cand_category = lex.parse_category(r"S\N/N/N")
-  cand_expressions = [Expression.fromstring(r"\o x y.give(x,y,o)")]
+  cand_expressions = [l.Expression.fromstring(r"\o x y.give(x,y,o)")]
   dummy_vars = {"sends": l.Variable("F000")}
   results = attempt_candidate_parse(lex, ["sends"], [cand_category],
                                     "John sends Mark it".split(),
                                     dummy_vars)
 
   ok_(len(results) > 0)
+
+
+def _make_simple_mock_ontology():
+  types = l.TypeSystem(["boolean", "obj"])
+  functions = [
+      types.new_function("and_", ("boolean", "boolean", "boolean"), lambda x, y: x and y),
+      types.new_function("foo", ("obj", "boolean"), lambda x: True),
+      types.new_function("bar", ("obj", "boolean"), lambda x: True),
+      types.new_function("not_", ("boolean", "boolean"), lambda x: not x),
+
+      types.new_function("invented_1", (("obj", "boolean"), "obj", "boolean"), lambda f, x: x is not None and f(x)),
+
+      types.new_function("threeplace", ("obj", "obj", "boolean", "boolean"), lambda x, y, o: True),
+  ]
+  constants = [types.new_constant("baz", "boolean"), types.new_constant("qux", "obj")]
+
+  ontology = l.Ontology(types, functions, constants, variable_weight=0.1)
+  return ontology
+
+
+def test_fromstring_typechecks():
+  """
+  Ensure that `Lexicon.fromstring` type-checks and assigns types to provided
+  entries.
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S
+  foo => S {\x.and_(x,baz)}
+  """, ontology=ontology, include_semantics=True)
+
+  foo_entry = lex._entries["foo"][0]
+  eq_(foo_entry.semantics().type, ontology.types["boolean", "boolean"])
+  eq_(foo_entry.semantics().variable.type, ontology.types["boolean"])
+
+
+def test_fromstring_typecheck_failure():
+  ontology = _make_simple_mock_ontology()
+  def should_raise():
+    lex = Lexicon.fromstring(r"""
+    :- S
+    foo => S {\x.and_(x,qux)}
+    """, ontology=ontology, include_semantics=True)
+
+  assert_raises(l.TypeException, should_raise)
+
+
+def test_add_entry_typecheck():
+  """
+  Ensure that dynamically added entries are type-checked / type-assigned.
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S
+  foo => S {\x.and_(x,baz)}
+  """, ontology=ontology, include_semantics=True)
+
+  lex.add_entry("bar", lex.parse_category("S"), l.Expression.fromstring(r"\x.and_(x,x)"))
+  bar_entry = lex.get_entries("bar")[0]
+  eq_(bar_entry.semantics().type, ontology.types["boolean", "boolean"])
+  eq_(bar_entry.semantics().variable.type, ontology.types["boolean"])
+
+
+def test_add_entry_typecheck_failure():
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S
+  foo => S {\x.and_(x,baz)}
+  """, ontology=ontology, include_semantics=True)
+
+  def should_raise():
+    lex.add_entry("bar", lex.parse_category("S"), l.Expression.fromstring(r"\x.and_(x,qux)"))
+  assert_raises(l.TypeException, should_raise)
