@@ -2491,6 +2491,10 @@ class Ontology(object):
             # No function information available. Ditch.
             return ANY_TYPE
 
+        args = list(node.args)
+        if len(args) != len(function_type.flat) - 1:
+          raise InconsistentTypeHierarchyException("Function %s appears with the wrong arity" % fn_name)
+
         for i, arg in enumerate(node.args):
           visitor(arg)
 
