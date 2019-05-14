@@ -75,7 +75,7 @@ class WordLearner(object):
         syntaxes (as returned by `get_candidate_categoies`)
     """
     query_tokens = [word for word in sentence
-                    if not self.lexicon._entries.get(word, [])]
+                    if not self.lexicon.get_entries(word)]
     if len(query_tokens) > 0:
       # Missing lexical entries -- induce entries for words which clearly
       # require an entry inserted
@@ -102,7 +102,8 @@ class WordLearner(object):
     # entry. This is a little hack to help the learner prefer to try to infer
     # new meanings for words it is currently more uncertain about.
     query_tokens = sorted(query_tokens,
-        key=lambda tok: max(self.lexicon._entries[tok], key=lambda entry: entry.weight()).weight())
+        key=lambda tok: max(self.lexicon.get_entries(tok),
+                            key=lambda entry: entry.weight()).weight())
     return query_tokens, query_token_syntaxes
 
     raise ValueError(
