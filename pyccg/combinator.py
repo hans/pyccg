@@ -405,8 +405,8 @@ class UndirectedTypeRaise(UndirectedBinaryCombinator):
       )
 
       # compute semantics
-      semantics = None
-      if function.semantics() is not None:
+      semantics = function.semantics()
+      if semantics is not None:
         core = deepcopy(function.semantics())
         parent = None
         while isinstance(core, l.LambdaExpression):
