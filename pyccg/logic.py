@@ -2516,7 +2516,7 @@ class Ontology(object):
         apparent_types.remove(ANY_TYPE)
       else:
         # TODO check type compatibility
-        raise NotImplementedError("Multiple apparent types: %s" % apparent_types)
+        raise InconsistentTypeHierarchyException(variable_name, expr)
     elif len(apparent_types) == 0:
       return ANY_TYPE
 
