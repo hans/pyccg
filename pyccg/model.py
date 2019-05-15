@@ -50,6 +50,9 @@ class Model(object):
     expr = self.ontology.unwrap_base_functions(expr)
 
     start = time.time()
+    self.satisfy_calls = 0
+    self.cache_hits = 0
+
     try:
       ret = self.satisfy(expr)
     except:
@@ -62,19 +65,28 @@ class Model(object):
 
     return ret
 
+  @property
+  def eval_time_means(self):
+    return {expr: sum(self.eval_times[expr]) / self.eval_counts[expr]
+            for expr in self.eval_times}
+
   def satisfy(self, expr, assignments=None):
     """
     Recursively interpret an expression in the context of some scene.
     """
+    self.satisfy_calls += 1
+
     if assignments is None:
       assignments = frozendict()
 
     if isinstance(expr, ApplicationExpression):
       function, arguments = expr.uncurry()
 
-      if function.variable.name in self._property_function_cache \
-          and tuple(arguments) in self._property_function_cache[function.variable.name]:
-        return self._property_function_cache[function.variable.name][tuple(arguments)]
+      fname = function.variable.name
+      if fname in self._property_function_cache \
+          and tuple(arguments) in self._property_function_cache[fname]:
+        self.cache_hits += 1
+        return self._property_function_cache[fname][tuple(arguments)]
 
       if isinstance(function, AbstractVariableExpression):
         #It's a predicate expression ("P(x,y)"), so used uncurried arguments
@@ -115,10 +127,13 @@ class Model(object):
             return thunk
 
         if callable(funval):
-          ret = funval(*argvals)
+          try:
+            ret = funval(*argvals)
+          except:
+            ret = None
 
-          if function.variable.name in self._property_function_cache:
-            self._property_function_cache[function.variable.name][tuple(arguments)] = ret
+          if fname in self._property_function_cache:
+            self._property_function_cache[fname][tuple(arguments)] = ret
 
           return ret
         return argvals in funval

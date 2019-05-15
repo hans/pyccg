@@ -599,7 +599,6 @@ def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
   category_prior = lex.observed_category_distribution(
       exclude_tokens=set(tokens), soft_propagate_roots=True)
   if smooth is not None:
-    L.debug("Smoothing category prior with k = %g", smooth)
     for key in category_prior.keys():
       category_prior[key] += smooth
     category_prior = category_prior.normalize()
@@ -916,6 +915,9 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
               sentence_semantics = sentence_semantics.replace(dummy_var, token_expr)
             sentence_semantics = sentence_semantics.simplify()
 
+            # TODO find a better type-resolution solution. The current one will
+            # be super slow -- we can pre-compute most of the relevant types
+            # except for the item swapped in.
             try:
               lex.ontology.typecheck(sentence_semantics)
             except l.TypeException:
@@ -929,10 +931,11 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
             # Add category priors.
             log_prior = sum(np.log(weight) for weight in syntax_weights)
-            joint_score = log_prior + np.log(likelihood)
-            if joint_score == -np.inf:
+            if log_prior == -np.inf or likelihood == 0:
               # Zero probability. Skip.
               continue
+
+            joint_score = log_prior + np.log(likelihood)
 
             data = tuple_unordered([token_comb, syntax_comb, expr_comb])
             new_item = (joint_score, data)
