@@ -31,6 +31,7 @@ def _make_mock_lexicon():
     twoarg => N/N/N {\a b.twoplace(a,b)}
     doggish => N/N {\x.dog(x)}
     dog => N {dog}
+    true => N {true}
 
     # NB, won't typecheck
     cat => N {unique}
@@ -73,6 +74,7 @@ def test_forward_application():
     ("twoplace", "dog", True, "N", r"twoplace(true,dog)"),
     ("the", "cat", False, None, None),
     ("twoplace", "cat", False, None, None),
+    ("twoarg", "true", True, "(N/N)", r"\z1.twoplace(true,z1)")
   ]
 
   for left, right, allowed, categ, semantics in cases:
