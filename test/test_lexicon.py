@@ -1,8 +1,11 @@
+from unittest.mock import MagicMock
+
 from nose.tools import *
 
 from pyccg.lexicon import *
 from pyccg import logic as l
 from pyccg.chart import WeightedCCGChartParser
+from pyccg.util import Distribution
 
 from nltk.ccg.lexicon import FunctionalCategory, PrimitiveCategory, Direction
 
@@ -314,7 +317,7 @@ def test_attempt_candidate_parse():
                                     "John sends Mark it".split(),
                                     dummy_vars)
 
-  ok_(len(results) > 0)
+  ok_(len(list(results)) > 0)
 
 
 def _make_simple_mock_ontology():
@@ -388,3 +391,34 @@ def test_add_entry_typecheck_failure():
   def should_raise():
     lex.add_entry("bar", lex.parse_category("S"), l.Expression.fromstring(r"\x.and_(x,qux)"))
   assert_raises(l.TypeException, should_raise)
+
+
+def test_zero_shot_type_request():
+  """
+  predict_zero_shot should infer the types of missing semantic forms and use as
+  specific a possible type request when invoking `Ontology.iter_expressions`
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+  bar => N {baz}
+  blah => S/N {baz}
+  """, ontology=ontology, include_semantics=True)
+
+  # setup: we observe a sentence "foo bar". ground truth semantics for 'foo' is
+  # \x.and(x,baz)
+
+  # Mock ontology.predict_zero_shot
+  mock = MagicMock(return_value=[])
+  ontology.iter_expressions = mock
+
+  tokens = ["foo"]
+  candidate_syntaxes = {"foo": Distribution.uniform([lex.parse_category("S/N")])}
+  sentence = "foo bar".split()
+
+  predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
+                    model=None, likelihood_fns=[])
+
+  eq_(len(mock.call_args_list), 1)
+  args, kwargs = mock.call_args
+  eq_(kwargs["type_request"], ontology.types["boolean", "e"])

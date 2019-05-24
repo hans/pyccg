@@ -3,7 +3,7 @@ Tools for updating and expanding lexicons, dealing with logical forms, etc.
 """
 
 from collections import defaultdict, Counter
-from copy import deepcopy
+from copy import copy, deepcopy
 from functools import reduce
 import itertools
 import logging
@@ -667,8 +667,11 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
       or get_semantic_arity
 
   # Prepare dummy variable which will be inserted into parse checks.
-  sub_exprs = {token: l.FunctionVariableExpression(dummy_vars[token])
-               for token in tokens}
+  token_vars = {token: copy(dummy_vars[token])
+                for token in tokens}
+  var_to_token = {var.name: token for token, var in token_vars.items()}
+  sub_exprs = {token: l.FunctionVariableExpression(token_var)
+               for token, token_var in token_vars.items()}
 
   lexicon = lexicon.clone()
   for token, syntax in zip(tokens, candidate_categories):
@@ -679,8 +682,29 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
   # First attempt a parse with only function application rules.
   results = chart.WeightedCCGChartParser(lexicon, ruleset=chart.ApplicationRuleSet) \
       .parse(sentence)
-  if True:#results or not allow_composition:
-    return results
+
+  for result in results:
+    # Retrieve apparent types of each token's dummy var.
+    apparent_types = defaultdict(list)
+    def visit(expr):
+      if isinstance(expr, l.FunctionVariableExpression):
+        if expr.variable.name in var_to_token:
+          apparent_types[var_to_token[expr.variable.name]].append(expr.type)
+      elif isinstance(expr, l.ApplicationExpression):
+        visit(expr.pred)
+        for arg in expr.args:
+          visit(arg)
+      elif isinstance(expr, l.LambdaExpression):
+        visit(expr.variable)
+        visit(expr.term)
+
+    sem = result.label()[0].semantics()
+    visit(sem)
+
+    # Make sure we inferred a type for every dummy var.
+    assert(set(apparent_types.keys()) == set(token_vars.keys()))
+
+    yield result, apparent_types
 
   # # Attempt to parse, allowing for function composition. In order to support
   # # this we need to pass a dummy expression which is a lambda.
@@ -896,18 +920,20 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
                                           syntax_comb,
                                           sentence,
                                           dummy_vars)
+        results = list(results)
         category_parse_results[syntax_comb] = results
 
-        # Now enumerate semantic forms.
-        candidate_exprs = tuple(list(iter_expressions_for_category(cat))
-                                for cat in syntax_comb)
-        n_expr_combs = np.prod(list(map(len, candidate_exprs)))
-        for expr_comb in tqdm(itertools.product(*candidate_exprs),
-                              total=n_expr_combs,
-                              desc="Expressions"):
-          # Compute likelihood of this joint syntax--semantics assignment.
-          likelihood = 0.0
-          for result in results:
+        for result, apparent_types in results:
+          candidate_exprs = [list(ontology.iter_expressions(max_depth=3, type_request=apparent_types[token][0]))
+                             for token in token_comb]
+
+          n_expr_combs = np.prod(list(map(len, candidate_exprs)))
+          for expr_comb in tqdm(itertools.product(*candidate_exprs),
+                                total=n_expr_combs,
+                                desc="Expressions"):
+            # Compute likelihood of this joint syntax--semantics assignment.
+            likelihood = 0.0
+
             # Swap in semantic values for each token.
             sentence_semantics = result.label()[0].semantics()
             for token, token_expr in zip(token_comb, expr_comb):
@@ -925,8 +951,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
             # Compute p(meaning | syntax, sentence, parse)
             logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
-                                     sentence_semantics, model)
-                       for likelihood_fn in likelihood_fns)
+                                    sentence_semantics, model)
+                      for likelihood_fn in likelihood_fns)
             likelihood += np.exp(logp)
 
             # Add category priors.
