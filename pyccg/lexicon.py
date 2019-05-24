@@ -661,17 +661,24 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
     candidate_categories: List of candidate categories for each token (one per
       token).
     sentence: Sentence which we are attempting to parse.
+
+  Returns:
+    results: A list of tuples describing candidate parses. The first element of
+      each tuple is a full parse tree of the sentence, including sentence
+      semantics, where dummy function variables are assigned for each of the
+      queried `tokens`. The second element of each tuple maps each token of
+      `tokens` to a list of apparent type usages within the parse. These type
+      observations can be used to later restrict the search for possible
+      semantic expressions for each of the tokens.
   """
 
   get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
       or get_semantic_arity
 
   # Prepare dummy variable which will be inserted into parse checks.
-  token_vars = {token: copy(dummy_vars[token])
-                for token in tokens}
-  var_to_token = {var.name: token for token, var in token_vars.items()}
-  sub_exprs = {token: l.FunctionVariableExpression(token_var)
-               for token, token_var in token_vars.items()}
+  var_to_token = {dummy_vars[token].name: token for token in tokens}
+  sub_exprs = {token: l.FunctionVariableExpression(copy(dummy_vars[token]))
+               for token in tokens}
 
   lexicon = lexicon.clone()
   for token, syntax in zip(tokens, candidate_categories):
@@ -702,7 +709,7 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
     visit(sem)
 
     # Make sure we inferred a type for every dummy var.
-    assert(set(apparent_types.keys()) == set(token_vars.keys()))
+    assert(set(apparent_types.keys()) == set(tokens))
 
     yield result, apparent_types
 
@@ -878,21 +885,6 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
   # We will restrict semantic arities based on the observed arities available
   # for each category. Pre-calculate the necessary associations.
   category_sem_arities = lex.category_semantic_arities(soft_propagate_roots=True)
-
-  def iter_expressions_for_arity(arity, max_depth=3):
-    type_request = ontology.types[("e",) * (arity + 1)]
-    return ontology.iter_expressions(max_depth=max_depth,
-                                     type_request=type_request)
-
-  def iter_expressions_for_category(cat):
-    """
-    Generate candidate semantic expressions for a lexical entry with the given
-    syntactic category. (Forms type requests based on known associations
-    between `cat` and semantic expressions.)
-    """
-    return itertools.chain.from_iterable(
-        iter_expressions_for_arity(arity)
-        for arity in category_sem_arities[cat])
 
   # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
