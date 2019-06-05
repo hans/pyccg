@@ -422,3 +422,35 @@ def test_zero_shot_type_request():
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
   eq_(kwargs["type_request"], ontology.types["boolean", "e"])
+
+
+def test_zero_shot_type_request_2arg():
+  """
+  predict_zero_shot should infer the types of missing semantic forms and use as
+  specific a possible type request when invoking `Ontology.iter_expressions`
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+  bar => N {qux}
+  blah => N {qux}
+  # dummy => N\N/N {\x y.threeplace(x,y,baz)}
+  """, ontology=ontology, include_semantics=True)
+
+  # setup: we observe a sentence "foo bar". ground truth semantics for 'foo' is
+  # \x.and(x,baz)
+
+  # Mock ontology.predict_zero_shot
+  mock = MagicMock(return_value=[])
+  ontology.iter_expressions = mock
+
+  tokens = ["foo"]
+  candidate_syntaxes = {"foo": Distribution.uniform([lex.parse_category(r"N\N/N")])}
+  sentence = "blah foo bar".split()
+
+  predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
+                    model=None, likelihood_fns=[])
+
+  eq_(len(mock.call_args_list), 1)
+  args, kwargs = mock.call_args
+  eq_(kwargs["type_request"], ontology.types["obj", "obj", "e"])
