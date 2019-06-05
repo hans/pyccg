@@ -17,212 +17,212 @@ printCCGDerivation = nchart.printCCGDerivation
 
 @total_ordering
 class EdgeI(object):
+  """
+  A hypothesis about the structure of part of a sentence.
+  Each edge records the fact that a structure is (partially)
+  consistent with the sentence.  An edge contains:
+  - A span, indicating what part of the sentence is
+   consistent with the hypothesized structure.
+  - A left-hand side, specifying what kind of structure is
+   hypothesized.
+  - A right-hand side, specifying the contents of the
+   hypothesized structure.
+  - A dot position, indicating how much of the hypothesized
+   structure is consistent with the sentence.
+  Every edge is either complete or incomplete:
+  - An edge is complete if its structure is fully consistent
+   with the sentence.
+  - An edge is incomplete if its structure is partially
+   consistent with the sentence.  For every incomplete edge, the
+   span specifies a possible prefix for the edge's structure.
+  There are two kinds of edge:
+  - A ``TreeEdge`` records which trees have been found to
+   be (partially) consistent with the text.
+  - A ``LeafEdge`` records the tokens occurring in the text.
+  The ``EdgeI`` interface provides a common interface to both types
+  of edge, allowing chart parsers to treat them in a uniform manner.
+  """
+
+  def __init__(self):
+    if self.__class__ == EdgeI:
+      raise TypeError('Edge is an abstract interface')
+
+  # ////////////////////////////////////////////////////////////
+  # Span
+  # ////////////////////////////////////////////////////////////
+
+  def span(self):
     """
-    A hypothesis about the structure of part of a sentence.
-    Each edge records the fact that a structure is (partially)
-    consistent with the sentence.  An edge contains:
-    - A span, indicating what part of the sentence is
-      consistent with the hypothesized structure.
-    - A left-hand side, specifying what kind of structure is
-      hypothesized.
-    - A right-hand side, specifying the contents of the
-      hypothesized structure.
-    - A dot position, indicating how much of the hypothesized
-      structure is consistent with the sentence.
-    Every edge is either complete or incomplete:
-    - An edge is complete if its structure is fully consistent
-      with the sentence.
-    - An edge is incomplete if its structure is partially
-      consistent with the sentence.  For every incomplete edge, the
-      span specifies a possible prefix for the edge's structure.
-    There are two kinds of edge:
-    - A ``TreeEdge`` records which trees have been found to
-      be (partially) consistent with the text.
-    - A ``LeafEdge`` records the tokens occurring in the text.
-    The ``EdgeI`` interface provides a common interface to both types
-    of edge, allowing chart parsers to treat them in a uniform manner.
+    Return a tuple ``(s, e)``, where ``tokens[s:e]`` is the
+    portion of the sentence that is consistent with this
+    edge's structure.
+    :rtype: tuple(int, int)
     """
+    raise NotImplementedError()
 
-    def __init__(self):
-        if self.__class__ == EdgeI:
-            raise TypeError('Edge is an abstract interface')
+  def start(self):
+    """
+    Return the start index of this edge's span.
+    :rtype: int
+    """
+    raise NotImplementedError()
 
-    # ////////////////////////////////////////////////////////////
-    # Span
-    # ////////////////////////////////////////////////////////////
+  def end(self):
+    """
+    Return the end index of this edge's span.
+    :rtype: int
+    """
+    raise NotImplementedError()
 
-    def span(self):
-        """
-        Return a tuple ``(s, e)``, where ``tokens[s:e]`` is the
-        portion of the sentence that is consistent with this
-        edge's structure.
-        :rtype: tuple(int, int)
-        """
-        raise NotImplementedError()
+  def length(self):
+    """
+    Return the length of this edge's span.
+    :rtype: int
+    """
+    raise NotImplementedError()
 
-    def start(self):
-        """
-        Return the start index of this edge's span.
-        :rtype: int
-        """
-        raise NotImplementedError()
+  # ////////////////////////////////////////////////////////////
+  # Left Hand Side
+  # ////////////////////////////////////////////////////////////
 
-    def end(self):
-        """
-        Return the end index of this edge's span.
-        :rtype: int
-        """
-        raise NotImplementedError()
+  def lhs(self):
+    """
+    Return this edge's left-hand side, which specifies what kind
+    of structure is hypothesized by this edge.
+    :see: ``TreeEdge`` and ``LeafEdge`` for a description of
+      the left-hand side values for each edge type.
+    """
+    raise NotImplementedError()
 
-    def length(self):
-        """
-        Return the length of this edge's span.
-        :rtype: int
-        """
-        raise NotImplementedError()
+  # ////////////////////////////////////////////////////////////
+  # Right Hand Side
+  # ////////////////////////////////////////////////////////////
 
-    # ////////////////////////////////////////////////////////////
-    # Left Hand Side
-    # ////////////////////////////////////////////////////////////
+  def rhs(self):
+    """
+    Return this edge's right-hand side, which specifies
+    the content of the structure hypothesized by this edge.
+    :see: ``TreeEdge`` and ``LeafEdge`` for a description of
+      the right-hand side values for each edge type.
+    """
+    raise NotImplementedError()
 
-    def lhs(self):
-        """
-        Return this edge's left-hand side, which specifies what kind
-        of structure is hypothesized by this edge.
-        :see: ``TreeEdge`` and ``LeafEdge`` for a description of
-            the left-hand side values for each edge type.
-        """
-        raise NotImplementedError()
+  def dot(self):
+    """
+    Return this edge's dot position, which indicates how much of
+    the hypothesized structure is consistent with the
+    sentence.  In particular, ``self.rhs[:dot]`` is consistent
+    with ``tokens[self.start():self.end()]``.
+    :rtype: int
+    """
+    raise NotImplementedError()
 
-    # ////////////////////////////////////////////////////////////
-    # Right Hand Side
-    # ////////////////////////////////////////////////////////////
+  def nextsym(self):
+    """
+    Return the element of this edge's right-hand side that
+    immediately follows its dot.
+    :rtype: Nonterminal or terminal or None
+    """
+    raise NotImplementedError()
 
-    def rhs(self):
-        """
-        Return this edge's right-hand side, which specifies
-        the content of the structure hypothesized by this edge.
-        :see: ``TreeEdge`` and ``LeafEdge`` for a description of
-            the right-hand side values for each edge type.
-        """
-        raise NotImplementedError()
+  def is_complete(self):
+    """
+    Return True if this edge's structure is fully consistent
+    with the text.
+    :rtype: bool
+    """
+    raise NotImplementedError()
 
-    def dot(self):
-        """
-        Return this edge's dot position, which indicates how much of
-        the hypothesized structure is consistent with the
-        sentence.  In particular, ``self.rhs[:dot]`` is consistent
-        with ``tokens[self.start():self.end()]``.
-        :rtype: int
-        """
-        raise NotImplementedError()
+  def is_incomplete(self):
+    """
+    Return True if this edge's structure is partially consistent
+    with the text.
+    :rtype: bool
+    """
+    raise NotImplementedError()
 
-    def nextsym(self):
-        """
-        Return the element of this edge's right-hand side that
-        immediately follows its dot.
-        :rtype: Nonterminal or terminal or None
-        """
-        raise NotImplementedError()
+  # ////////////////////////////////////////////////////////////
+  # Comparisons & hashing
+  # ////////////////////////////////////////////////////////////
 
-    def is_complete(self):
-        """
-        Return True if this edge's structure is fully consistent
-        with the text.
-        :rtype: bool
-        """
-        raise NotImplementedError()
+  def __eq__(self, other):
+    return (
+      self.__class__ is other.__class__
+      and self._comparison_key == other._comparison_key
+    )
 
-    def is_incomplete(self):
-        """
-        Return True if this edge's structure is partially consistent
-        with the text.
-        :rtype: bool
-        """
-        raise NotImplementedError()
+  def __ne__(self, other):
+    return not self == other
 
-    # ////////////////////////////////////////////////////////////
-    # Comparisons & hashing
-    # ////////////////////////////////////////////////////////////
+  def __lt__(self, other):
+    if not isinstance(other, EdgeI):
+      raise_unorderable_types("<", self, other)
+    if self.__class__ is other.__class__:
+      return self._comparison_key < other._comparison_key
+    else:
+      return self.__class__.__name__ < other.__class__.__name__
 
-    def __eq__(self, other):
-        return (
-            self.__class__ is other.__class__
-            and self._comparison_key == other._comparison_key
-        )
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __lt__(self, other):
-        if not isinstance(other, EdgeI):
-            raise_unorderable_types("<", self, other)
-        if self.__class__ is other.__class__:
-            return self._comparison_key < other._comparison_key
-        else:
-            return self.__class__.__name__ < other.__class__.__name__
-
-    def __hash__(self):
-        try:
-            return self._hash
-        except AttributeError:
-            self._hash = hash(self._comparison_key)
-            return self._hash
+  def __hash__(self):
+    try:
+      return self._hash
+    except AttributeError:
+      self._hash = hash(self._comparison_key)
+      return self._hash
 
 
 # Based on the EdgeI class from NLTK.
 # A number of the properties of the EdgeI interface don't
 # transfer well to CCGs, however.
 class CCGEdge(EdgeI):
-    def __init__(self, span, categ, rule, semantics=None):
-        self._span = span
-        self._categ = categ
-        self._rule = rule
-        self._semantics = semantics
-        self._comparison_key = (span, categ, rule, semantics)
+  def __init__(self, span, categ, rule, semantics=None):
+    self._span = span
+    self._categ = categ
+    self._rule = rule
+    self._semantics = semantics
+    self._comparison_key = (span, categ, rule, semantics)
 
-    # Accessors
-    def lhs(self): return self._categ
-    def span(self): return self._span
-    def start(self): return self._span[0]
-    def end(self): return self._span[1]
-    def length(self): return self._span[1] - self.span[0]
-    def rhs(self): return ()
-    def dot(self): return 0
-    def is_complete(self): return True
-    def is_incomplete(self): return False
-    def nextsym(self): return None
+  # Accessors
+  def lhs(self): return self._categ
+  def span(self): return self._span
+  def start(self): return self._span[0]
+  def end(self): return self._span[1]
+  def length(self): return self._span[1] - self.span[0]
+  def rhs(self): return ()
+  def dot(self): return 0
+  def is_complete(self): return True
+  def is_incomplete(self): return False
+  def nextsym(self): return None
 
-    def categ(self): return self._categ
-    def rule(self): return self._rule
-    def semantics(self): return self._semantics
+  def categ(self): return self._categ
+  def rule(self): return self._rule
+  def semantics(self): return self._semantics
 
 class CCGLeafEdge(EdgeI):
-    '''
-    Class representing leaf edges in a CCG derivation.
-    '''
-    def __init__(self, pos, token, leaf):
-        self._pos = pos
-        self._token = token
-        self._leaf = leaf
-        self._comparison_key = (pos, token.categ(), leaf)
+  '''
+  Class representing leaf edges in a CCG derivation.
+  '''
+  def __init__(self, pos, token, leaf):
+    self._pos = pos
+    self._token = token
+    self._leaf = leaf
+    self._comparison_key = (pos, token.categ(), leaf)
 
-    # Accessors
-    def lhs(self): return self._token.categ()
-    def span(self): return (self._pos, self._pos+1)
-    def start(self): return self._pos
-    def end(self): return self._pos + 1
-    def length(self): return 1
-    def rhs(self): return self._leaf
-    def dot(self): return 0
-    def is_complete(self): return True
-    def is_incomplete(self): return False
-    def nextsym(self): return None
+  # Accessors
+  def lhs(self): return self._token.categ()
+  def span(self): return (self._pos, self._pos+1)
+  def start(self): return self._pos
+  def end(self): return self._pos + 1
+  def length(self): return 1
+  def rhs(self): return self._leaf
+  def dot(self): return 0
+  def is_complete(self): return True
+  def is_incomplete(self): return False
+  def nextsym(self): return None
 
-    def token(self): return self._token
-    def categ(self): return self._token.categ()
-    def semantics(self): return self._token.semantics()
-    def leaf(self): return self._leaf
+  def token(self): return self._token
+  def categ(self): return self._token.categ()
+  def semantics(self): return self._token.semantics()
+  def leaf(self): return self._leaf
 
 
 ########################################################################
@@ -231,95 +231,95 @@ class CCGLeafEdge(EdgeI):
 
 
 class ChartRuleI(object):
-    """
-    A rule that specifies what new edges are licensed by any given set
-    of existing edges.  Each chart rule expects a fixed number of
-    edges, as indicated by the class variable ``NUM_EDGES``.  In
-    particular:
-    - A chart rule with ``NUM_EDGES=0`` specifies what new edges are
-      licensed, regardless of existing edges.
-    - A chart rule with ``NUM_EDGES=1`` specifies what new edges are
-      licensed by a single existing edge.
-    - A chart rule with ``NUM_EDGES=2`` specifies what new edges are
-      licensed by a pair of existing edges.
-    :type NUM_EDGES: int
-    :cvar NUM_EDGES: The number of existing edges that this rule uses
-        to license new edges.  Typically, this number ranges from zero
-        to two.
-    """
+  """
+  A rule that specifies what new edges are licensed by any given set
+  of existing edges.  Each chart rule expects a fixed number of
+  edges, as indicated by the class variable ``NUM_EDGES``.  In
+  particular:
+  - A chart rule with ``NUM_EDGES=0`` specifies what new edges are
+   licensed, regardless of existing edges.
+  - A chart rule with ``NUM_EDGES=1`` specifies what new edges are
+   licensed by a single existing edge.
+  - A chart rule with ``NUM_EDGES=2`` specifies what new edges are
+   licensed by a pair of existing edges.
+  :type NUM_EDGES: int
+  :cvar NUM_EDGES: The number of existing edges that this rule uses
+    to license new edges.  Typically, this number ranges from zero
+    to two.
+  """
 
-    def apply(self, chart, grammar, *edges):
-        """
-        Return a generator that will add edges licensed by this rule
-        and the given edges to the chart, one at a time.  Each
-        time the generator is resumed, it will either add a new
-        edge and yield that edge; or return.
-        :type edges: list(EdgeI)
-        :param edges: A set of existing edges.  The number of edges
-            that should be passed to ``apply()`` is specified by the
-            ``NUM_EDGES`` class variable.
-        :rtype: iter(EdgeI)
-        """
-        raise NotImplementedError()
+  def apply(self, chart, grammar, *edges):
+    """
+    Return a generator that will add edges licensed by this rule
+    and the given edges to the chart, one at a time.  Each
+    time the generator is resumed, it will either add a new
+    edge and yield that edge; or return.
+    :type edges: list(EdgeI)
+    :param edges: A set of existing edges.  The number of edges
+      that should be passed to ``apply()`` is specified by the
+      ``NUM_EDGES`` class variable.
+    :rtype: iter(EdgeI)
+    """
+    raise NotImplementedError()
 
-    def apply_everywhere(self, chart, grammar):
-        """
-        Return a generator that will add all edges licensed by
-        this rule, given the edges that are currently in the
-        chart, one at a time.  Each time the generator is resumed,
-        it will either add a new edge and yield that edge; or return.
-        :rtype: iter(EdgeI)
-        """
-        raise NotImplementedError()
+  def apply_everywhere(self, chart, grammar):
+    """
+    Return a generator that will add all edges licensed by
+    this rule, given the edges that are currently in the
+    chart, one at a time.  Each time the generator is resumed,
+    it will either add a new edge and yield that edge; or return.
+    :rtype: iter(EdgeI)
+    """
+    raise NotImplementedError()
 
 
 class AbstractChartRule(ChartRuleI):
-    """
-    An abstract base class for chart rules.  ``AbstractChartRule``
-    provides:
-    - A default implementation for ``apply``.
-    - A default implementation for ``apply_everywhere``,
-      (Currently, this implementation assumes that ``NUM_EDGES``<=3.)
-    - A default implementation for ``__str__``, which returns a
-      name based on the rule's class name.
-    """
+  """
+  An abstract base class for chart rules.  ``AbstractChartRule``
+  provides:
+  - A default implementation for ``apply``.
+  - A default implementation for ``apply_everywhere``,
+   (Currently, this implementation assumes that ``NUM_EDGES``<=3.)
+  - A default implementation for ``__str__``, which returns a
+   name based on the rule's class name.
+  """
 
-    # Subclasses must define apply.
-    def apply(self, chart, grammar, *edges):
-        raise NotImplementedError()
+  # Subclasses must define apply.
+  def apply(self, chart, grammar, *edges):
+    raise NotImplementedError()
 
-    # Default: loop through the given number of edges, and call
-    # self.apply() for each set of edges.
-    def apply_everywhere(self, chart, grammar):
-        if self.NUM_EDGES == 0:
-            for new_edge in self.apply(chart, grammar):
-                yield new_edge
+  # Default: loop through the given number of edges, and call
+  # self.apply() for each set of edges.
+  def apply_everywhere(self, chart, grammar):
+    if self.NUM_EDGES == 0:
+      for new_edge in self.apply(chart, grammar):
+        yield new_edge
 
-        elif self.NUM_EDGES == 1:
-            for e1 in chart:
-                for new_edge in self.apply(chart, grammar, e1):
-                    yield new_edge
+    elif self.NUM_EDGES == 1:
+      for e1 in chart:
+        for new_edge in self.apply(chart, grammar, e1):
+          yield new_edge
 
-        elif self.NUM_EDGES == 2:
-            for e1 in chart:
-                for e2 in chart:
-                    for new_edge in self.apply(chart, grammar, e1, e2):
-                        yield new_edge
+    elif self.NUM_EDGES == 2:
+      for e1 in chart:
+        for e2 in chart:
+          for new_edge in self.apply(chart, grammar, e1, e2):
+            yield new_edge
 
-        elif self.NUM_EDGES == 3:
-            for e1 in chart:
-                for e2 in chart:
-                    for e3 in chart:
-                        for new_edge in self.apply(chart, grammar, e1, e2, e3):
-                            yield new_edge
+    elif self.NUM_EDGES == 3:
+      for e1 in chart:
+        for e2 in chart:
+          for e3 in chart:
+            for new_edge in self.apply(chart, grammar, e1, e2, e3):
+              yield new_edge
 
-        else:
-            raise AssertionError('NUM_EDGES>3 is not currently supported')
+    else:
+      raise AssertionError('NUM_EDGES>3 is not currently supported')
 
-    # Default: return a name based on the class name.
-    def __str__(self):
-        # Add spaces between InitialCapsWords.
-        return re.sub('([a-z])([A-Z])', r'\1 \2', self.__class__.__name__)
+  # Default: return a name based on the class name.
+  def __str__(self):
+    # Add spaces between InitialCapsWords.
+    return re.sub('([a-z])([A-Z])', r'\1 \2', self.__class__.__name__)
 
 
 class CCGChartRule(AbstractChartRule):
@@ -330,92 +330,98 @@ class CCGChartRule(AbstractChartRule):
 
 
 class BinaryCombinatorRule(CCGChartRule):
-    '''
-    Class implementing application of a binary combinator to a chart.
-    Takes the directed combinator to apply.
-    '''
-    NUMEDGES = 2
-    def __init__(self,combinator):
-        self._combinator = combinator
+  '''
+  Class implementing application of a binary combinator to a chart.
+  Takes the directed combinator to apply.
+  '''
+  NUMEDGES = 2
+  def __init__(self,combinator):
+    self._combinator = combinator
 
-    # Apply a combinator
-    def apply(self, chart, grammar, left_edge, right_edge):
-        # The left & right edges must be touching.
-        if not (left_edge.end() == right_edge.start()):
-            return
+  # Apply a combinator
+  def apply(self, chart, grammar, left_edge, right_edge):
+    # The left & right edges must be touching.
+    if not (left_edge.end() == right_edge.start()):
+      return
 
-        # Check if the two edges are permitted to combine.
-        # If so, generate the corresponding edge.
-        if self._combinator.can_combine(left_edge, right_edge):
-            for categ, semantics in self._combinator.combine(left_edge, right_edge):
-                new_edge = CCGEdge(span=(left_edge.start(), right_edge.end()),
-                                   categ=categ, semantics=semantics,
-                                   rule=self._combinator)
-                if chart.insert(new_edge,(left_edge,right_edge)):
-                    yield new_edge
+    # Check if the two edges are permitted to combine.
+    # If so, generate the corresponding edge.
+    print(self._combinator, left_edge.semantics(), right_edge.semantics())
+    can_combine = self._combinator.can_combine(left_edge, right_edge)
+    print("\t\t", can_combine)
+    if can_combine:#self._combinator.can_combine(left_edge, right_edge):
+      for categ, semantics in self._combinator.combine(left_edge, right_edge):
+        new_edge = CCGEdge(span=(left_edge.start(), right_edge.end()),
+                 categ=categ, semantics=semantics,
+                 rule=self._combinator)
+        print("\t\t", semantics, semantics.type if semantics is not None else "")
+        if chart.insert(new_edge,(left_edge,right_edge)):
+          print("\t\t\tgood")
+          yield new_edge
 
-    # The representation of the combinator (for printing derivations)
-    def __str__(self):
-        return "%s" % self._combinator
+  # The representation of the combinator (for printing derivations)
+  def __str__(self):
+    return "%s" % self._combinator
 
 # Type-raising must be handled slightly differently to the other rules, as the
 # resulting rules only span a single edge, rather than both edges.
 class ForwardTypeRaiseRule(CCGChartRule):
-    '''
-    Class for applying forward type raising
-    '''
-    NUMEDGES = 2
+  '''
+  Class for applying forward type raising
+  '''
+  NUMEDGES = 2
 
-    def __init__(self):
-       self._combinator = ForwardT
-    def apply(self, chart, grammar, left_edge, right_edge):
-        if not (left_edge.end() == right_edge.start()):
-            return
+  def __init__(self):
+   self._combinator = ForwardT
+  def apply(self, chart, grammar, left_edge, right_edge):
+    if not (left_edge.end() == right_edge.start()):
+      return
 
-        for categ, semantics in self._combinator.combine(left_edge, right_edge):
-            new_edge = CCGEdge(span=left_edge.span(), categ=categ, semantics=semantics,
-                               rule=self._combinator)
-            if chart.insert(new_edge,(left_edge,)):
-                yield new_edge
+    for categ, semantics in self._combinator.combine(left_edge, right_edge):
+      new_edge = CCGEdge(span=left_edge.span(), categ=categ, semantics=semantics,
+               rule=self._combinator)
+      if chart.insert(new_edge,(left_edge,)):
+        yield new_edge
 
-    def __str__(self):
-        return "%s" % self._combinator
+  def __str__(self):
+    return "%s" % self._combinator
 
 class BackwardTypeRaiseRule(CCGChartRule):
-    '''
-    Class for applying backward type raising.
-    '''
-    NUMEDGES = 2
+  '''
+  Class for applying backward type raising.
+  '''
+  NUMEDGES = 2
 
-    def __init__(self):
-       self._combinator = BackwardT
-    def apply(self, chart, grammar, left_edge, right_edge):
-        if not (left_edge.end() == right_edge.start()):
-            return
+  def __init__(self):
+    self._combinator = BackwardT
 
-        for categ, semantics in self._combinator.combine(left_edge, right_edge):
-            new_edge = CCGEdge(span=right_edge.span(), categ=categ, semantics=semantics,
-                               rule=self._combinator)
-            if chart.insert(new_edge,(right_edge,)):
-                yield new_edge
+  def apply(self, chart, grammar, left_edge, right_edge):
+    if not (left_edge.end() == right_edge.start()):
+      return
 
-    def __str__(self):
-        return "%s" % self._combinator
+    for categ, semantics in self._combinator.combine(left_edge, right_edge):
+      new_edge = CCGEdge(span=right_edge.span(), categ=categ, semantics=semantics,
+               rule=self._combinator)
+      if chart.insert(new_edge,(right_edge,)):
+        yield new_edge
+
+  def __str__(self):
+    return "%s" % self._combinator
 
 
 # Common sets of combinators used for English derivations.
 ApplicationRuleSet = [BinaryCombinatorRule(ForwardApplication),
-                        BinaryCombinatorRule(BackwardApplication)]
+                      BinaryCombinatorRule(BackwardApplication)]
 CompositionRuleSet = [BinaryCombinatorRule(ForwardComposition),
-                        BinaryCombinatorRule(BackwardComposition),
-                        BinaryCombinatorRule(BackwardBx)]
+                      BinaryCombinatorRule(BackwardComposition),
+                      BinaryCombinatorRule(BackwardBx)]
 SubstitutionRuleSet = [BinaryCombinatorRule(ForwardSubstitution),
-                        BinaryCombinatorRule(BackwardSx)]
+                       BinaryCombinatorRule(BackwardSx)]
 TypeRaiseRuleSet = [ForwardTypeRaiseRule(), BackwardTypeRaiseRule()]
 
 # The standard English rule set.
 DefaultRuleSet = ApplicationRuleSet + CompositionRuleSet + \
-                    SubstitutionRuleSet + TypeRaiseRuleSet
+    SubstitutionRuleSet + TypeRaiseRuleSet
 
 
 ########################################################################
@@ -424,453 +430,453 @@ DefaultRuleSet = ApplicationRuleSet + CompositionRuleSet + \
 
 
 class Chart(object):
+  """
+  A blackboard for hypotheses about the syntactic constituents of a
+  sentence.  A chart contains a set of edges, and each edge encodes
+  a single hypothesis about the structure of some portion of the
+  sentence.
+  The ``select`` method can be used to select a specific collection
+  of edges.  For example ``chart.select(is_complete=True, start=0)``
+  yields all complete edges whose start indices are 0.  To ensure
+  the efficiency of these selection operations, ``Chart`` dynamically
+  creates and maintains an index for each set of attributes that
+  have been selected on.
+  In order to reconstruct the trees that are represented by an edge,
+  the chart associates each edge with a set of child pointer lists.
+  A child pointer list is a list of the edges that license an
+  edge's right-hand side.
+  :ivar _tokens: The sentence that the chart covers.
+  :ivar _num_leaves: The number of tokens.
+  :ivar _edges: A list of the edges in the chart
+  :ivar _edge_to_cpls: A dictionary mapping each edge to a set
+    of child pointer lists that are associated with that edge.
+  :ivar _indexes: A dictionary mapping tuples of edge attributes
+    to indices, where each index maps the corresponding edge
+    attribute values to lists of edges.
+  """
+
+  def __init__(self, tokens):
     """
-    A blackboard for hypotheses about the syntactic constituents of a
-    sentence.  A chart contains a set of edges, and each edge encodes
-    a single hypothesis about the structure of some portion of the
-    sentence.
-    The ``select`` method can be used to select a specific collection
-    of edges.  For example ``chart.select(is_complete=True, start=0)``
-    yields all complete edges whose start indices are 0.  To ensure
-    the efficiency of these selection operations, ``Chart`` dynamically
-    creates and maintains an index for each set of attributes that
-    have been selected on.
-    In order to reconstruct the trees that are represented by an edge,
-    the chart associates each edge with a set of child pointer lists.
-    A child pointer list is a list of the edges that license an
-    edge's right-hand side.
-    :ivar _tokens: The sentence that the chart covers.
-    :ivar _num_leaves: The number of tokens.
-    :ivar _edges: A list of the edges in the chart
-    :ivar _edge_to_cpls: A dictionary mapping each edge to a set
-        of child pointer lists that are associated with that edge.
-    :ivar _indexes: A dictionary mapping tuples of edge attributes
-        to indices, where each index maps the corresponding edge
-        attribute values to lists of edges.
+    Construct a new chart. The chart is initialized with the
+    leaf edges corresponding to the terminal leaves.
+    :type tokens: list
+    :param tokens: The sentence that this chart will be used to parse.
     """
+    # Record the sentence token and the sentence length.
+    self._tokens = tuple(tokens)
+    self._num_leaves = len(self._tokens)
 
-    def __init__(self, tokens):
-        """
-        Construct a new chart. The chart is initialized with the
-        leaf edges corresponding to the terminal leaves.
-        :type tokens: list
-        :param tokens: The sentence that this chart will be used to parse.
-        """
-        # Record the sentence token and the sentence length.
-        self._tokens = tuple(tokens)
-        self._num_leaves = len(self._tokens)
+    # Initialise the chart.
+    self.initialize()
 
-        # Initialise the chart.
-        self.initialize()
+  def initialize(self):
+    """
+    Clear the chart.
+    """
+    # A list of edges contained in this chart.
+    self._edges = []
 
-    def initialize(self):
-        """
-        Clear the chart.
-        """
-        # A list of edges contained in this chart.
-        self._edges = []
+    # The set of child pointer lists associated with each edge.
+    self._edge_to_cpls = {}
 
-        # The set of child pointer lists associated with each edge.
-        self._edge_to_cpls = {}
+    # Indexes mapping attribute values to lists of edges
+    # (used by select()).
+    self._indexes = {}
 
-        # Indexes mapping attribute values to lists of edges
-        # (used by select()).
-        self._indexes = {}
+  # ////////////////////////////////////////////////////////////
+  # Sentence Access
+  # ////////////////////////////////////////////////////////////
 
-    # ////////////////////////////////////////////////////////////
-    # Sentence Access
-    # ////////////////////////////////////////////////////////////
+  def num_leaves(self):
+    """
+    Return the number of words in this chart's sentence.
+    :rtype: int
+    """
+    return self._num_leaves
 
-    def num_leaves(self):
-        """
-        Return the number of words in this chart's sentence.
-        :rtype: int
-        """
-        return self._num_leaves
+  def leaf(self, index):
+    """
+    Return the leaf value of the word at the given index.
+    :rtype: str
+    """
+    return self._tokens[index]
 
-    def leaf(self, index):
-        """
-        Return the leaf value of the word at the given index.
-        :rtype: str
-        """
-        return self._tokens[index]
+  def leaves(self):
+    """
+    Return a list of the leaf values of each word in the
+    chart's sentence.
+    :rtype: list(str)
+    """
+    return self._tokens
 
-    def leaves(self):
-        """
-        Return a list of the leaf values of each word in the
-        chart's sentence.
-        :rtype: list(str)
-        """
-        return self._tokens
+  # ////////////////////////////////////////////////////////////
+  # Edge access
+  # ////////////////////////////////////////////////////////////
 
-    # ////////////////////////////////////////////////////////////
-    # Edge access
-    # ////////////////////////////////////////////////////////////
+  def edges(self):
+    """
+    Return a list of all edges in this chart.  New edges
+    that are added to the chart after the call to edges()
+    will *not* be contained in this list.
+    :rtype: list(EdgeI)
+    :see: ``iteredges``, ``select``
+    """
+    return self._edges[:]
 
-    def edges(self):
-        """
-        Return a list of all edges in this chart.  New edges
-        that are added to the chart after the call to edges()
-        will *not* be contained in this list.
-        :rtype: list(EdgeI)
-        :see: ``iteredges``, ``select``
-        """
-        return self._edges[:]
+  def iteredges(self):
+    """
+    Return an iterator over the edges in this chart.  It is
+    not guaranteed that new edges which are added to the
+    chart before the iterator is exhausted will also be generated.
+    :rtype: iter(EdgeI)
+    :see: ``edges``, ``select``
+    """
+    return iter(self._edges)
 
-    def iteredges(self):
-        """
-        Return an iterator over the edges in this chart.  It is
-        not guaranteed that new edges which are added to the
-        chart before the iterator is exhausted will also be generated.
-        :rtype: iter(EdgeI)
-        :see: ``edges``, ``select``
-        """
-        return iter(self._edges)
+  # Iterating over the chart yields its edges.
+  __iter__ = iteredges
 
-    # Iterating over the chart yields its edges.
-    __iter__ = iteredges
+  def num_edges(self):
+    """
+    Return the number of edges contained in this chart.
+    :rtype: int
+    """
+    return len(self._edge_to_cpls)
 
-    def num_edges(self):
-        """
-        Return the number of edges contained in this chart.
-        :rtype: int
-        """
-        return len(self._edge_to_cpls)
+  def select(self, **restrictions):
+    """
+    Return an iterator over the edges in this chart.  Any
+    new edges that are added to the chart before the iterator
+    is exahusted will also be generated.  ``restrictions``
+    can be used to restrict the set of edges that will be
+    generated.
+    :param span: Only generate edges ``e`` where ``e.span()==span``
+    :param start: Only generate edges ``e`` where ``e.start()==start``
+    :param end: Only generate edges ``e`` where ``e.end()==end``
+    :param length: Only generate edges ``e`` where ``e.length()==length``
+    :param lhs: Only generate edges ``e`` where ``e.lhs()==lhs``
+    :param rhs: Only generate edges ``e`` where ``e.rhs()==rhs``
+    :param nextsym: Only generate edges ``e`` where
+      ``e.nextsym()==nextsym``
+    :param dot: Only generate edges ``e`` where ``e.dot()==dot``
+    :param is_complete: Only generate edges ``e`` where
+      ``e.is_complete()==is_complete``
+    :param is_incomplete: Only generate edges ``e`` where
+      ``e.is_incomplete()==is_incomplete``
+    :rtype: iter(EdgeI)
+    """
+    # If there are no restrictions, then return all edges.
+    if restrictions == {}:
+      return iter(self._edges)
 
-    def select(self, **restrictions):
-        """
-        Return an iterator over the edges in this chart.  Any
-        new edges that are added to the chart before the iterator
-        is exahusted will also be generated.  ``restrictions``
-        can be used to restrict the set of edges that will be
-        generated.
-        :param span: Only generate edges ``e`` where ``e.span()==span``
-        :param start: Only generate edges ``e`` where ``e.start()==start``
-        :param end: Only generate edges ``e`` where ``e.end()==end``
-        :param length: Only generate edges ``e`` where ``e.length()==length``
-        :param lhs: Only generate edges ``e`` where ``e.lhs()==lhs``
-        :param rhs: Only generate edges ``e`` where ``e.rhs()==rhs``
-        :param nextsym: Only generate edges ``e`` where
-            ``e.nextsym()==nextsym``
-        :param dot: Only generate edges ``e`` where ``e.dot()==dot``
-        :param is_complete: Only generate edges ``e`` where
-            ``e.is_complete()==is_complete``
-        :param is_incomplete: Only generate edges ``e`` where
-            ``e.is_incomplete()==is_incomplete``
-        :rtype: iter(EdgeI)
-        """
-        # If there are no restrictions, then return all edges.
-        if restrictions == {}:
-            return iter(self._edges)
+    # Find the index corresponding to the given restrictions.
+    restr_keys = sorted(restrictions.keys())
+    restr_keys = tuple(restr_keys)
 
-        # Find the index corresponding to the given restrictions.
-        restr_keys = sorted(restrictions.keys())
-        restr_keys = tuple(restr_keys)
+    # If it doesn't exist, then create it.
+    if restr_keys not in self._indexes:
+      self._add_index(restr_keys)
 
-        # If it doesn't exist, then create it.
-        if restr_keys not in self._indexes:
-            self._add_index(restr_keys)
+    vals = tuple(restrictions[key] for key in restr_keys)
+    return iter(self._indexes[restr_keys].get(vals, []))
 
-        vals = tuple(restrictions[key] for key in restr_keys)
-        return iter(self._indexes[restr_keys].get(vals, []))
+  def _add_index(self, restr_keys):
+    """
+    A helper function for ``select``, which creates a new index for
+    a given set of attributes (aka restriction keys).
+    """
+    # Make sure it's a valid index.
+    for key in restr_keys:
+      if not hasattr(EdgeI, key):
+        raise ValueError('Bad restriction: %s' % key)
 
-    def _add_index(self, restr_keys):
-        """
-        A helper function for ``select``, which creates a new index for
-        a given set of attributes (aka restriction keys).
-        """
-        # Make sure it's a valid index.
-        for key in restr_keys:
-            if not hasattr(EdgeI, key):
-                raise ValueError('Bad restriction: %s' % key)
+    # Create the index.
+    index = self._indexes[restr_keys] = {}
 
-        # Create the index.
-        index = self._indexes[restr_keys] = {}
+    # Add all existing edges to the index.
+    for edge in self._edges:
+      vals = tuple(getattr(edge, key)() for key in restr_keys)
+      index.setdefault(vals, []).append(edge)
 
-        # Add all existing edges to the index.
-        for edge in self._edges:
-            vals = tuple(getattr(edge, key)() for key in restr_keys)
-            index.setdefault(vals, []).append(edge)
+  def _register_with_indexes(self, edge):
+    """
+    A helper function for ``insert``, which registers the new
+    edge with all existing indexes.
+    """
+    for (restr_keys, index) in self._indexes.items():
+      vals = tuple(getattr(edge, key)() for key in restr_keys)
+      index.setdefault(vals, []).append(edge)
 
-    def _register_with_indexes(self, edge):
-        """
-        A helper function for ``insert``, which registers the new
-        edge with all existing indexes.
-        """
-        for (restr_keys, index) in self._indexes.items():
-            vals = tuple(getattr(edge, key)() for key in restr_keys)
-            index.setdefault(vals, []).append(edge)
+  # ////////////////////////////////////////////////////////////
+  # Edge Insertion
+  # ////////////////////////////////////////////////////////////
 
-    # ////////////////////////////////////////////////////////////
-    # Edge Insertion
-    # ////////////////////////////////////////////////////////////
+  def insert_with_backpointer(self, new_edge, previous_edge, child_edge):
+    """
+    Add a new edge to the chart, using a pointer to the previous edge.
+    """
+    cpls = self.child_pointer_lists(previous_edge)
+    new_cpls = [cpl + (child_edge,) for cpl in cpls]
+    return self.insert(new_edge, *new_cpls)
 
-    def insert_with_backpointer(self, new_edge, previous_edge, child_edge):
-        """
-        Add a new edge to the chart, using a pointer to the previous edge.
-        """
-        cpls = self.child_pointer_lists(previous_edge)
-        new_cpls = [cpl + (child_edge,) for cpl in cpls]
-        return self.insert(new_edge, *new_cpls)
+  def insert(self, edge, *child_pointer_lists):
+    """
+    Add a new edge to the chart, and return True if this operation
+    modified the chart.  In particular, return true iff the chart
+    did not already contain ``edge``, or if it did not already associate
+    ``child_pointer_lists`` with ``edge``.
+    :type edge: EdgeI
+    :param edge: The new edge
+    :type child_pointer_lists: sequence of tuple(EdgeI)
+    :param child_pointer_lists: A sequence of lists of the edges that
+      were used to form this edge.  This list is used to reconstruct
+      the trees (or partial trees) that are associated with ``edge``.
+    :rtype: bool
+    """
+    # Is it a new edge?
+    if edge not in self._edge_to_cpls:
+      # Add it to the list of edges.
+      self._append_edge(edge)
+      # Register with indexes.
+      self._register_with_indexes(edge)
 
-    def insert(self, edge, *child_pointer_lists):
-        """
-        Add a new edge to the chart, and return True if this operation
-        modified the chart.  In particular, return true iff the chart
-        did not already contain ``edge``, or if it did not already associate
-        ``child_pointer_lists`` with ``edge``.
-        :type edge: EdgeI
-        :param edge: The new edge
-        :type child_pointer_lists: sequence of tuple(EdgeI)
-        :param child_pointer_lists: A sequence of lists of the edges that
-            were used to form this edge.  This list is used to reconstruct
-            the trees (or partial trees) that are associated with ``edge``.
-        :rtype: bool
-        """
-        # Is it a new edge?
-        if edge not in self._edge_to_cpls:
-            # Add it to the list of edges.
-            self._append_edge(edge)
-            # Register with indexes.
-            self._register_with_indexes(edge)
+    # Get the set of child pointer lists for this edge.
+    cpls = self._edge_to_cpls.setdefault(edge, OrderedDict())
+    chart_was_modified = False
+    for child_pointer_list in child_pointer_lists:
+      child_pointer_list = tuple(child_pointer_list)
+      if child_pointer_list not in cpls:
+        # It's a new CPL; register it, and return true.
+        cpls[child_pointer_list] = True
+        chart_was_modified = True
+    return chart_was_modified
 
-        # Get the set of child pointer lists for this edge.
-        cpls = self._edge_to_cpls.setdefault(edge, OrderedDict())
-        chart_was_modified = False
-        for child_pointer_list in child_pointer_lists:
-            child_pointer_list = tuple(child_pointer_list)
-            if child_pointer_list not in cpls:
-                # It's a new CPL; register it, and return true.
-                cpls[child_pointer_list] = True
-                chart_was_modified = True
-        return chart_was_modified
+  def _append_edge(self, edge):
+    self._edges.append(edge)
 
-    def _append_edge(self, edge):
-        self._edges.append(edge)
+  # ////////////////////////////////////////////////////////////
+  # Tree extraction & child pointer lists
+  # ////////////////////////////////////////////////////////////
 
-    # ////////////////////////////////////////////////////////////
-    # Tree extraction & child pointer lists
-    # ////////////////////////////////////////////////////////////
+  def parses(self, root, tree_class=Tree):
+    """
+    Return an iterator of the complete tree structures that span
+    the entire chart, and whose root node is ``root``.
+    """
+    for edge in self.select(start=0, end=self._num_leaves, lhs=root):
+      for tree in self.trees(edge, tree_class=tree_class, complete=True):
+        yield tree
 
-    def parses(self, root, tree_class=Tree):
-        """
-        Return an iterator of the complete tree structures that span
-        the entire chart, and whose root node is ``root``.
-        """
-        for edge in self.select(start=0, end=self._num_leaves, lhs=root):
-            for tree in self.trees(edge, tree_class=tree_class, complete=True):
-                yield tree
+  def trees(self, edge, tree_class=Tree, complete=False):
+    """
+    Return an iterator of the tree structures that are associated
+    with ``edge``.
+    If ``edge`` is incomplete, then the unexpanded children will be
+    encoded as childless subtrees, whose node value is the
+    corresponding terminal or nonterminal.
+    :rtype: list(Tree)
+    :note: If two trees share a common subtree, then the same
+      Tree may be used to encode that subtree in
+      both trees.  If you need to eliminate this subtree
+      sharing, then create a deep copy of each tree.
+    """
+    return iter(self._trees(edge, complete, memo={}, tree_class=tree_class))
 
-    def trees(self, edge, tree_class=Tree, complete=False):
-        """
-        Return an iterator of the tree structures that are associated
-        with ``edge``.
-        If ``edge`` is incomplete, then the unexpanded children will be
-        encoded as childless subtrees, whose node value is the
-        corresponding terminal or nonterminal.
-        :rtype: list(Tree)
-        :note: If two trees share a common subtree, then the same
-            Tree may be used to encode that subtree in
-            both trees.  If you need to eliminate this subtree
-            sharing, then create a deep copy of each tree.
-        """
-        return iter(self._trees(edge, complete, memo={}, tree_class=tree_class))
+  def _trees(self, edge, complete, memo, tree_class):
+    """
+    A helper function for ``trees``.
+    :param memo: A dictionary used to record the trees that we've
+      generated for each edge, so that when we see an edge more
+      than once, we can reuse the same trees.
+    """
+    # If we've seen this edge before, then reuse our old answer.
+    if edge in memo:
+      return memo[edge]
 
-    def _trees(self, edge, complete, memo, tree_class):
-        """
-        A helper function for ``trees``.
-        :param memo: A dictionary used to record the trees that we've
-            generated for each edge, so that when we see an edge more
-            than once, we can reuse the same trees.
-        """
-        # If we've seen this edge before, then reuse our old answer.
-        if edge in memo:
-            return memo[edge]
+    # when we're reading trees off the chart, don't use incomplete edges
+    if complete and edge.is_incomplete():
+      return []
 
-        # when we're reading trees off the chart, don't use incomplete edges
-        if complete and edge.is_incomplete():
-            return []
+    # Leaf edges.
+    if isinstance(edge, LeafEdge):
+      leaf = self._tokens[edge.start()]
+      memo[edge] = [leaf]
+      return [leaf]
 
-        # Leaf edges.
-        if isinstance(edge, LeafEdge):
-            leaf = self._tokens[edge.start()]
-            memo[edge] = [leaf]
-            return [leaf]
+    # Until we're done computing the trees for edge, set
+    # memo[edge] to be empty.  This has the effect of filtering
+    # out any cyclic trees (i.e., trees that contain themselves as
+    # descendants), because if we reach this edge via a cycle,
+    # then it will appear that the edge doesn't generate any trees.
+    memo[edge] = []
+    trees = []
+    lhs = edge.lhs().symbol()
 
-        # Until we're done computing the trees for edge, set
-        # memo[edge] to be empty.  This has the effect of filtering
-        # out any cyclic trees (i.e., trees that contain themselves as
-        # descendants), because if we reach this edge via a cycle,
-        # then it will appear that the edge doesn't generate any trees.
-        memo[edge] = []
-        trees = []
-        lhs = edge.lhs().symbol()
+    # Each child pointer list can be used to form trees.
+    for cpl in self.child_pointer_lists(edge):
+      # Get the set of child choices for each child pointer.
+      # child_choices[i] is the set of choices for the tree's
+      # ith child.
+      child_choices = [self._trees(cp, complete, memo, tree_class) for cp in cpl]
 
-        # Each child pointer list can be used to form trees.
-        for cpl in self.child_pointer_lists(edge):
-            # Get the set of child choices for each child pointer.
-            # child_choices[i] is the set of choices for the tree's
-            # ith child.
-            child_choices = [self._trees(cp, complete, memo, tree_class) for cp in cpl]
+      # For each combination of children, add a tree.
+      for children in itertools.product(*child_choices):
+        trees.append(tree_class(lhs, children))
 
-            # For each combination of children, add a tree.
-            for children in itertools.product(*child_choices):
-                trees.append(tree_class(lhs, children))
+  def child_pointer_lists(self, edge):
+    """
+    Return the set of child pointer lists for the given edge.
+    Each child pointer list is a list of edges that have
+    been used to form this edge.
+    :rtype: list(list(EdgeI))
+    """
+    # Make a copy, in case they modify it.
+    return self._edge_to_cpls.get(edge, {}).keys()
 
-    def child_pointer_lists(self, edge):
-        """
-        Return the set of child pointer lists for the given edge.
-        Each child pointer list is a list of edges that have
-        been used to form this edge.
-        :rtype: list(list(EdgeI))
-        """
-        # Make a copy, in case they modify it.
-        return self._edge_to_cpls.get(edge, {}).keys()
+  # ////////////////////////////////////////////////////////////
+  # Display
+  # ////////////////////////////////////////////////////////////
+  def pretty_format_edge(self, edge, width=None):
+    """
+    Return a pretty-printed string representation of a given edge
+    in this chart.
+    :rtype: str
+    :param width: The number of characters allotted to each
+      index in the sentence.
+    """
+    if width is None:
+      width = 50 // (self.num_leaves() + 1)
+    (start, end) = (edge.start(), edge.end())
 
-    # ////////////////////////////////////////////////////////////
-    # Display
-    # ////////////////////////////////////////////////////////////
-    def pretty_format_edge(self, edge, width=None):
-        """
-        Return a pretty-printed string representation of a given edge
-        in this chart.
-        :rtype: str
-        :param width: The number of characters allotted to each
-            index in the sentence.
-        """
-        if width is None:
-            width = 50 // (self.num_leaves() + 1)
-        (start, end) = (edge.start(), edge.end())
+    str = '|' + ('.' + ' ' * (width - 1)) * start
 
-        str = '|' + ('.' + ' ' * (width - 1)) * start
+    # Zero-width edges are "#" if complete, ">" if incomplete
+    if start == end:
+      if edge.is_complete():
+        str += '#'
+      else:
+        str += '>'
 
-        # Zero-width edges are "#" if complete, ">" if incomplete
-        if start == end:
-            if edge.is_complete():
-                str += '#'
-            else:
-                str += '>'
+    # Spanning complete edges are "[===]"; Other edges are
+    # "[---]" if complete, "[--->" if incomplete
+    elif edge.is_complete() and edge.span() == (0, self._num_leaves):
+      str += '[' + ('=' * width) * (end - start - 1) + '=' * (width - 1) + ']'
+    elif edge.is_complete():
+      str += '[' + ('-' * width) * (end - start - 1) + '-' * (width - 1) + ']'
+    else:
+      str += '[' + ('-' * width) * (end - start - 1) + '-' * (width - 1) + '>'
 
-        # Spanning complete edges are "[===]"; Other edges are
-        # "[---]" if complete, "[--->" if incomplete
-        elif edge.is_complete() and edge.span() == (0, self._num_leaves):
-            str += '[' + ('=' * width) * (end - start - 1) + '=' * (width - 1) + ']'
-        elif edge.is_complete():
-            str += '[' + ('-' * width) * (end - start - 1) + '-' * (width - 1) + ']'
-        else:
-            str += '[' + ('-' * width) * (end - start - 1) + '-' * (width - 1) + '>'
+    str += (' ' * (width - 1) + '.') * (self._num_leaves - end)
+    return str + '| %s' % edge
 
-        str += (' ' * (width - 1) + '.') * (self._num_leaves - end)
-        return str + '| %s' % edge
+  def pretty_format_leaves(self, width=None):
+    """
+    Return a pretty-printed string representation of this
+    chart's leaves.  This string can be used as a header
+    for calls to ``pretty_format_edge``.
+    """
+    if width is None:
+      width = 50 // (self.num_leaves() + 1)
 
-    def pretty_format_leaves(self, width=None):
-        """
-        Return a pretty-printed string representation of this
-        chart's leaves.  This string can be used as a header
-        for calls to ``pretty_format_edge``.
-        """
-        if width is None:
-            width = 50 // (self.num_leaves() + 1)
+    if self._tokens is not None and width > 1:
+      header = '|.'
+      for tok in self._tokens:
+        header += tok[: width - 1].center(width - 1) + '.'
+      header += '|'
+    else:
+      header = ''
 
-        if self._tokens is not None and width > 1:
-            header = '|.'
-            for tok in self._tokens:
-                header += tok[: width - 1].center(width - 1) + '.'
-            header += '|'
-        else:
-            header = ''
+    return header
 
-        return header
+  def pretty_format(self, width=None):
+    """
+    Return a pretty-printed string representation of this chart.
+    :param width: The number of characters allotted to each
+      index in the sentence.
+    :rtype: str
+    """
+    if width is None:
+      width = 50 // (self.num_leaves() + 1)
+    # sort edges: primary key=length, secondary key=start index.
+    # (and filter out the token edges)
+    edges = sorted([(e.length(), e.start(), e) for e in self])
+    edges = [e for (_, _, e) in edges]
 
-    def pretty_format(self, width=None):
-        """
-        Return a pretty-printed string representation of this chart.
-        :param width: The number of characters allotted to each
-            index in the sentence.
-        :rtype: str
-        """
-        if width is None:
-            width = 50 // (self.num_leaves() + 1)
-        # sort edges: primary key=length, secondary key=start index.
-        # (and filter out the token edges)
-        edges = sorted([(e.length(), e.start(), e) for e in self])
-        edges = [e for (_, _, e) in edges]
+    return (
+      self.pretty_format_leaves(width)
+      + '\n'
+      + '\n'.join(self.pretty_format_edge(edge, width) for edge in edges)
+    )
 
-        return (
-            self.pretty_format_leaves(width)
-            + '\n'
-            + '\n'.join(self.pretty_format_edge(edge, width) for edge in edges)
+  # ////////////////////////////////////////////////////////////
+  # Display: Dot (AT&T Graphviz)
+  # ////////////////////////////////////////////////////////////
+
+  def dot_digraph(self):
+    # Header
+    s = 'digraph nltk_chart {\n'
+    # s += '  size="5,5";\n'
+    s += '  rankdir=LR;\n'
+    s += '  node [height=0.1,width=0.1];\n'
+    s += '  node [style=filled, color="lightgray"];\n'
+
+    # Set up the nodes
+    for y in range(self.num_edges(), -1, -1):
+      if y == 0:
+        s += '  node [style=filled, color="black"];\n'
+      for x in range(self.num_leaves() + 1):
+        if y == 0 or (
+          x <= self._edges[y - 1].start() or x >= self._edges[y - 1].end()
+        ):
+          s += '  %04d.%04d [label=""];\n' % (x, y)
+
+    # Add a spacer
+    s += '  x [style=invis]; x->0000.0000 [style=invis];\n'
+
+    # Declare ranks.
+    for x in range(self.num_leaves() + 1):
+      s += '  {rank=same;'
+      for y in range(self.num_edges() + 1):
+        if y == 0 or (
+          x <= self._edges[y - 1].start() or x >= self._edges[y - 1].end()
+        ):
+          s += ' %04d.%04d' % (x, y)
+      s += '}\n'
+
+    # Add the leaves
+    s += '  edge [style=invis, weight=100];\n'
+    s += '  node [shape=plaintext]\n'
+    s += '  0000.0000'
+    for x in range(self.num_leaves()):
+      s += '->%s->%04d.0000' % (self.leaf(x), x + 1)
+    s += ';\n\n'
+
+    # Add the edges
+    s += '  edge [style=solid, weight=1];\n'
+    for y, edge in enumerate(self):
+      for x in range(edge.start()):
+        s += '  %04d.%04d -> %04d.%04d [style="invis"];\n' % (
+          x,
+          y + 1,
+          x + 1,
+          y + 1,
         )
-
-    # ////////////////////////////////////////////////////////////
-    # Display: Dot (AT&T Graphviz)
-    # ////////////////////////////////////////////////////////////
-
-    def dot_digraph(self):
-        # Header
-        s = 'digraph nltk_chart {\n'
-        # s += '  size="5,5";\n'
-        s += '  rankdir=LR;\n'
-        s += '  node [height=0.1,width=0.1];\n'
-        s += '  node [style=filled, color="lightgray"];\n'
-
-        # Set up the nodes
-        for y in range(self.num_edges(), -1, -1):
-            if y == 0:
-                s += '  node [style=filled, color="black"];\n'
-            for x in range(self.num_leaves() + 1):
-                if y == 0 or (
-                    x <= self._edges[y - 1].start() or x >= self._edges[y - 1].end()
-                ):
-                    s += '  %04d.%04d [label=""];\n' % (x, y)
-
-        # Add a spacer
-        s += '  x [style=invis]; x->0000.0000 [style=invis];\n'
-
-        # Declare ranks.
-        for x in range(self.num_leaves() + 1):
-            s += '  {rank=same;'
-            for y in range(self.num_edges() + 1):
-                if y == 0 or (
-                    x <= self._edges[y - 1].start() or x >= self._edges[y - 1].end()
-                ):
-                    s += ' %04d.%04d' % (x, y)
-            s += '}\n'
-
-        # Add the leaves
-        s += '  edge [style=invis, weight=100];\n'
-        s += '  node [shape=plaintext]\n'
-        s += '  0000.0000'
-        for x in range(self.num_leaves()):
-            s += '->%s->%04d.0000' % (self.leaf(x), x + 1)
-        s += ';\n\n'
-
-        # Add the edges
-        s += '  edge [style=solid, weight=1];\n'
-        for y, edge in enumerate(self):
-            for x in range(edge.start()):
-                s += '  %04d.%04d -> %04d.%04d [style="invis"];\n' % (
-                    x,
-                    y + 1,
-                    x + 1,
-                    y + 1,
-                )
-            s += '  %04d.%04d -> %04d.%04d [label="%s"];\n' % (
-                edge.start(),
-                y + 1,
-                edge.end(),
-                y + 1,
-                edge,
-            )
-            for x in range(edge.end(), self.num_leaves()):
-                s += '  %04d.%04d -> %04d.%04d [style="invis"];\n' % (
-                    x,
-                    y + 1,
-                    x + 1,
-                    y + 1,
-                )
-        s += '}\n'
-        return s
+      s += '  %04d.%04d -> %04d.%04d [label="%s"];\n' % (
+        edge.start(),
+        y + 1,
+        edge.end(),
+        y + 1,
+        edge,
+      )
+      for x in range(edge.end(), self.num_leaves()):
+        s += '  %04d.%04d -> %04d.%04d [style="invis"];\n' % (
+          x,
+          y + 1,
+          x + 1,
+          y + 1,
+        )
+    s += '}\n'
+    return s
 
 class CCGChart(Chart):
   def __init__(self, tokens):
