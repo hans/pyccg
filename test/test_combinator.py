@@ -48,7 +48,8 @@ def _make_mock_lexicon():
   return lex
 
 
-def _test_case_binary(op, lex, left_entry, right_entry, allowed, expected_categ, expected_semantics):
+def _test_case_binary(op, lex, left_entry, right_entry, allowed,
+                      expected_categ, expected_semantics, expected_type):
   A = lex._entries[left_entry][0]
   B = lex._entries[right_entry][0]
 
@@ -61,6 +62,10 @@ def _test_case_binary(op, lex, left_entry, right_entry, allowed, expected_categ,
     categ, semantics = ret[0]
     eq_(str(categ), expected_categ)
     eq_(str(semantics.normalize()), expected_semantics)
+    if expected_type is not None:
+      if isinstance(expected_type, (str, tuple)):
+        expected_type = lex.ontology.types[expected_type]
+      eq_(semantics.type, expected_type)
   else:
     ok_(not op.can_combine(A, B),
         "Should not allow %s of %s / %s" % (op, A, B))
@@ -70,15 +75,15 @@ def test_forward_application():
   lex = _make_mock_lexicon()
 
   cases = [
-    ("the", "dog", True, "N", r"unique(dog)"),
-    ("twoplace", "dog", True, "N", r"twoplace(true,dog)"),
-    ("the", "cat", False, None, None),
-    ("twoplace", "cat", False, None, None),
-    ("twoarg", "true", True, "(N/N)", r"\z1.twoplace(true,z1)")
+    ("the", "dog", True, "N", r"unique(dog)", "obj"),
+    ("twoplace", "dog", True, "N", r"twoplace(true,dog)", "obj"),
+    ("the", "cat", False, None, None, None),
+    ("twoplace", "cat", False, None, None, None),
+    ("twoarg", "true", True, "(N/N)", r"\z1.twoplace(true,z1)", (("obj", "boolean"), "obj")),
   ]
 
-  for left, right, allowed, categ, semantics in cases:
-    yield _test_case_binary, ForwardApplication, lex, left, right, allowed, categ, semantics
+  for left, right, allowed, categ, semantics, type in cases:
+    yield _test_case_binary, ForwardApplication, lex, left, right, allowed, categ, semantics, type
 
 def test_backward_application():
   lex = _make_mock_lexicon()
@@ -91,7 +96,7 @@ def test_backward_application():
   ]
 
   for left, right, allowed, categ, semantics in cases:
-    yield _test_case_binary, BackwardApplication, lex, left, right, allowed, categ, semantics
+    yield _test_case_binary, BackwardApplication, lex, left, right, allowed, categ, semantics, None
 
 
 def test_forward_composition():
@@ -105,7 +110,7 @@ def test_forward_composition():
   ]
 
   for left, right, allowed, categ, semantics in cases:
-    yield _test_case_binary, ForwardComposition, lex, left, right, allowed, categ, semantics
+    yield _test_case_binary, ForwardComposition, lex, left, right, allowed, categ, semantics, None
 
 
 def test_forward_substitution():
@@ -116,5 +121,5 @@ def test_forward_substitution():
   ]
 
   for left, right, allowed, categ, semantics in cases:
-    yield _test_case_binary, ForwardSubstitution, lex, left, right, allowed, categ, semantics
+    yield _test_case_binary, ForwardSubstitution, lex, left, right, allowed, categ, semantics, None
 
