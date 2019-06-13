@@ -332,7 +332,9 @@ def _make_simple_mock_ontology():
 
       types.new_function("threeplace", ("obj", "obj", "boolean", "boolean"), lambda x, y, o: True),
   ]
-  constants = [types.new_constant("baz", "boolean"), types.new_constant("qux", "obj")]
+  constants = [types.new_constant("baz", "boolean"),
+               types.new_constant("qux", "obj"),
+               types.new_constant("quz", "obj"),]
 
   ontology = l.Ontology(types, functions, constants, variable_weight=0.1)
   return ontology
@@ -433,19 +435,19 @@ def test_zero_shot_type_request_2arg():
   lex = Lexicon.fromstring(r"""
   :- S, N
   bar => N {qux}
-  blah => N {qux}
-  # dummy => N\N/N {\x y.threeplace(x,y,baz)}
+  blah => N {quz}
+  # dummy => S\N/N {\x y.threeplace(x,y,baz)}
   """, ontology=ontology, include_semantics=True)
 
-  # setup: we observe a sentence "foo bar". ground truth semantics for 'foo' is
-  # \x.and(x,baz)
+  # setup: we observe a sentence "blah foo bar". ground truth semantics for 'foo' is
+  # \x y.threeplace(x,y,baz)
 
   # Mock ontology.predict_zero_shot
   mock = MagicMock(return_value=[])
   ontology.iter_expressions = mock
 
   tokens = ["foo"]
-  candidate_syntaxes = {"foo": Distribution.uniform([lex.parse_category(r"N\N/N")])}
+  candidate_syntaxes = {"foo": Distribution.uniform([lex.parse_category(r"S\N/N")])}
   sentence = "blah foo bar".split()
 
   predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
