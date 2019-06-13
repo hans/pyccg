@@ -27,12 +27,15 @@ class WordLearner(object):
                update_perceptron_algo="perceptron",
                prune_entries=None,
                zero_shot_limit=5,
+               max_expr_depth=6,
                limit_induction=False):
     """
     Args:
       lexicon:
       bootstrap: If `True`, enable syntactic bootstrapping.
     """
+    # TODO document arguments, at least with pointers to relevant inner
+    # functions
     self.lexicon = lexicon
 
     self.bootstrap = bootstrap
@@ -45,6 +48,7 @@ class WordLearner(object):
     self.bootstrap_alpha = bootstrap_alpha
     self.prune_entries = prune_entries
     self.zero_shot_limit = zero_shot_limit
+    self.max_expr_depth = max_expr_depth
     self.limit_induction = limit_induction
 
     if update_perceptron_algo not in ["perceptron", "reinforce"]:
@@ -237,7 +241,9 @@ class WordLearner(object):
       weighted_results: List of weighted parse results for the example.
     """
 
-    augment_lexicon_args = augment_lexicon_args or {}
+    base_augment_lexicon_args = {"max_expr_depth": self.max_expr_depth}
+    base_augment_lexicon_args.update(augment_lexicon_args or {})
+    augment_lexicon_args = base_augment_lexicon_args
 
     base_update_perceptron_args = {"update_method": self.update_perceptron_algo}
     base_update_perceptron_args.update(update_perceptron_args or {})
