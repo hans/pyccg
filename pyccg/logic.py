@@ -1009,7 +1009,7 @@ class Expression(SubstituteBindingsI):
                                                          replace_bound, alpha_convert),
                                      self.__class__)
 
-    def normalize(self, newvars=None):
+    def normalize(self, ignore=None):
         """Rename auto-generated unique variables"""
         def get_indiv_vars(e):
             if isinstance(e, IndividualVariableExpression):
@@ -1022,6 +1022,8 @@ class Expression(SubstituteBindingsI):
 
         result = self
         for i,e in enumerate(sorted(get_indiv_vars(self), key=lambda e: e.variable)):
+            if ignore is not None and e.variable.name in ignore:
+                continue
             if isinstance(e,EventVariableExpression):
                 newVar = e.__class__(Variable('e0%s' % (i+1)))
             elif isinstance(e,IndividualVariableExpression):
@@ -2232,8 +2234,7 @@ class Ontology(object):
     return self.constant_system.constants_dict
 
   EXPR_TYPES = [ApplicationExpression, ConstantExpression,
-                IndividualVariableExpression, LambdaExpression,
-                FunctionVariableExpression]
+                IndividualVariableExpression, LambdaExpression]
 
   def add_functions(self, functions):
     self._clear_expression_cache()
@@ -2275,7 +2276,8 @@ class Ontology(object):
     ret = self._iter_expressions_inner(max_depth, bound_vars=(),
                                        type_request=type_request,
                                        **kwargs)
-    ret = [x.normalize() for x in ret]
+    ret = [x.normalize(ignore=self.functions_dict.keys())
+           for x in ret]
 
     return ret
 
@@ -2412,6 +2414,7 @@ class Ontology(object):
                 else:
                   yield candidate
       elif expr_type == IndividualVariableExpression:
+        # Yield bound variables.
         for bound_var in bound_vars:
           if type_request and not bound_var.type.matches(type_request):
             continue
@@ -2419,6 +2422,20 @@ class Ontology(object):
           # print("\t" * (6-max_depth), "var %s" % bound_var)
 
           yield IndividualVariableExpression(bound_var)
+
+        # Yield function expressions.
+        # NB we don't support enumerating bound variables with function types
+        # right now -- the following only considers yielding fixed functions
+        # from the ontology.
+        for function in self.functions:
+          # Be a little strict here to avoid excessive enumeration -- only
+          # consider emitting functions when the type request specifically
+          # demands a function, not e.g. AnyType
+          if type_request is None or type_request == self.types.ANY_TYPE \
+              or not function.type.matches(type_request):
+            continue
+
+          yield IndividualVariableExpression(Variable(function.name, function.type))
       elif expr_type == ConstantExpression:
         if use_unused_constants:
           try:
@@ -2436,19 +2453,6 @@ class Ontology(object):
               continue
 
             yield ConstantExpression(constant)
-      elif expr_type == FunctionVariableExpression:
-        # NB we don't support enumerating bound variables with function types
-        # right now -- the following only considers yielding fixed functions
-        # from the ontology.
-        for function in self.functions:
-          # Be a little strict here to avoid excessive enumeration -- only
-          # consider emitting functions when the type request specifically
-          # demands a function, not e.g. AnyType
-          if type_request is None or type_request == self.types.ANY_TYPE \
-              or not function.type.matches(type_request):
-            continue
-
-          yield FunctionVariableExpression(Variable(function.name, function.type))
 
   def typecheck(self, expr, extra_type_signature=None):
     type_signature = self._nltk_type_signature
@@ -2562,7 +2566,7 @@ class Ontology(object):
     elif isinstance(expr, ApplicationExpression):
       function = self.functions_dict[expr.pred.variable.name]
       return function.arity - len(expr.args)
-    elif isinstance(expr, (FunctionVariableExpression, ConstantExpression)) \
+    elif isinstance(expr, (IndividualVariableExpression, ConstantExpression)) \
         and expr.variable.name in self.functions_dict:
       return self.functions_dict[expr.variable.name].arity
     elif isinstance(expr, ConstantExpression) \
@@ -2654,7 +2658,7 @@ class Ontology(object):
 
     # Expressions which might contain a function reference
     func_exprs = (ConstantExpression, EventVariableExpression,
-                  FunctionVariableExpression)
+                  IndividualVariableExpression)
 
     def inner(expr, var_stack):
       if isinstance(expr, LambdaExpression):
@@ -2681,8 +2685,6 @@ class Ontology(object):
       elif isinstance(expr, IndividualVariableExpression):
         bruijn_index = len(var_stack) - var_stack.index(expr.variable.name) - 1
         return "$%i" % bruijn_index
-      elif isinstance(expr, FunctionVariableExpression):
-        raise ValueError("unknown function %s" % expr)
       elif isinstance(expr, ConstantExpression):
         return expr.variable.name
       else:
@@ -2715,7 +2717,7 @@ class Ontology(object):
     Given an Expression, unwrap all functions in base form.
     """
     # TODO extract the more general replacement logic here
-    if isinstance(expr, (ConstantExpression, FunctionVariableExpression)) \
+    if isinstance(expr, (ConstantExpression, IndividualVariableExpression)) \
         and expr.variable.name in self.functions_dict:
       return self.unwrap_function(expr.variable.name)
     elif isinstance(expr, LambdaExpression):
