@@ -780,7 +780,36 @@ class EventType(BasicType):
         return 'EVENT'
 
 
+class AnyBasicType(BasicType):
+  """
+  A basic type variable which matches with all other basic type variables.
+  """
+  def __eq__(self, other):
+    return isinstance(other, AnyBasicType)
+
+  def __ne__(self, other):
+    return not self == other
+
+  __hash__ = Type.__hash__
+
+  def matches(self, other):
+    return isinstance(other, BasicType)
+
+  def resolve(self, other):
+    if isinstance(other, BasicType):
+      return other
+
+  def __str__(self):
+    return "?"
+
+  def str(self):
+    return "ANY_BASIC"
+
+
 class AnyType(BasicType, ComplexType):
+  """
+  A wildcard type variable which matches with all other type variables.
+  """
   @property
   def first(self): return self
   @property
@@ -801,7 +830,7 @@ class AnyType(BasicType, ComplexType):
     return other
 
   def __str__(self):
-    return "?"
+    return "*"
 
   def str(self):
     return "ANY"
@@ -811,6 +840,7 @@ ENTITY_TYPE = EntityType()
 TRUTH_TYPE = TruthValueType()
 EVENT_TYPE = EventType()
 ANY_TYPE = AnyType()
+ANY_BASIC_TYPE = AnyBasicType()
 
 
 def read_type(type_string):
@@ -1883,11 +1913,13 @@ def is_eventvar(expr):
 class TypeSystem(object):
 
   ANY_TYPE = ANY_TYPE
+  ANY_BASIC_TYPE = ANY_BASIC_TYPE
   ENTITY_TYPE = ENTITY_TYPE
   EVENT_TYPE = EVENT_TYPE
 
   def __init__(self, primitive_types):
-    assert "?" not in primitive_types, "Cannot override ANY_TYPE name"
+    assert "*" not in primitive_types, "Cannot override ANY_TYPE name"
+    assert "?" not in primitive_types, "Cannot override ANY_BASIC_TYPE name"
     assert "v" not in primitive_types, "Cannot override EVENT_TYPE name"
     self._types = {}
 
@@ -1899,7 +1931,8 @@ class TypeSystem(object):
             assert isinstance(primitive_type, BasicType)
             self._types[primitive_type.name] = primitive_type
 
-    self._types["?"] = self.ANY_TYPE
+    self._types["*"] = self.ANY_TYPE
+    self._types["?"] = self.ANY_BASIC_TYPE
     self._types["v"] = self.EVENT_TYPE
     self._types["e"] = self.ENTITY_TYPE
 
