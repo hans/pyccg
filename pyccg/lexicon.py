@@ -549,6 +549,15 @@ def get_category_primitives(category):
     raise ValueError("unknown category type %r" % category)
 
 
+def get_category_arity(category):
+  if isinstance(category, PrimitiveCategory):
+    return 0
+  elif isinstance(category, FunctionalCategory):
+    return 1 + get_category_arity(category.res())
+  else:
+    raise ValueError("unknown category type %r" % category)
+
+
 def get_yield(category):
   """
   Get the primitive yield node of a syntactic category.
@@ -675,14 +684,18 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
   get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
       or get_semantic_arity
 
-  # Prepare dummy variable which will be inserted into parse checks.
-  var_to_token = {dummy_vars[token].name: token for token in tokens}
-  sub_exprs = {token: l.FunctionVariableExpression(copy(dummy_vars[token]))
-               for token in tokens}
-
   lexicon = lexicon.clone()
   for token, syntax in zip(tokens, candidate_categories):
-    lexicon.set_entries(token, [(syntax, sub_exprs[token], 1.0)])
+    var = copy(dummy_vars[token])
+    expr = l.IndividualVariableExpression(var)
+
+    if lexicon.ontology is not None:
+      # assign semantic arity based on syntactic arity
+      arity = get_category_arity(syntax)
+      var.type = lexicon.ontology.types[("?",) * (arity + 1)]
+      expr.typecheck()
+
+    lexicon.set_entries(token, [(syntax, expr, 1.0)])
 
   parse_results = []
 
@@ -691,25 +704,13 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
       .parse(sentence)
 
   for result in results:
-    # Retrieve apparent types of each token's dummy var.
-    apparent_types = defaultdict(list)
-    def visit(expr):
-      if isinstance(expr, l.FunctionVariableExpression):
-        if expr.variable.name in var_to_token:
-          apparent_types[var_to_token[expr.variable.name]].append(expr.type)
-      elif isinstance(expr, l.ApplicationExpression):
-        visit(expr.pred)
-        for arg in expr.args:
-          visit(arg)
-      elif isinstance(expr, l.LambdaExpression):
-        visit(expr.variable)
-        visit(expr.term)
+    apparent_types = None
 
-    sem = result.label()[0].semantics()
-    visit(sem)
-
-    # Make sure we inferred a type for every dummy var.
-    assert(set(apparent_types.keys()) == set(tokens))
+    if lexicon.ontology is not None:
+      # Retrieve apparent types of each token's dummy var.
+      sem = result.label()[0].semantics()
+      apparent_types = {token: lexicon.ontology.infer_type(sem, var.name)
+                        for token, var in dummy_vars.items()}
 
     yield result, apparent_types
 
@@ -916,7 +917,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
         category_parse_results[syntax_comb] = results
 
         for result, apparent_types in results:
-          candidate_exprs = [list(ontology.iter_expressions(max_depth=3, type_request=apparent_types[token][0]))
+          candidate_exprs = [list(ontology.iter_expressions(
+                              max_depth=3, type_request=apparent_types[token]))
                              for token in token_comb]
 
           n_expr_combs = np.prod(list(map(len, candidate_exprs)))

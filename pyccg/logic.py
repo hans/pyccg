@@ -639,6 +639,12 @@ class Type(object):
   def fromstring(cls, s):
     return read_type(s)
 
+  def matches(self, other):
+    """
+    Check if `self` is a subtype (or equivalent to) `other`.
+    """
+    raise NotImplementedError()
+
 
 class BasicType(Type):
   def __init__(self, name=None, parent=None):
@@ -653,7 +659,7 @@ class BasicType(Type):
   def parents(self):
     parents = []
     node = self
-    while isinstance(node, BasicType) and node.parent is not None:
+    while node.parent is not None:
       parents.append(node.parent)
       node = node.parent
 
@@ -753,6 +759,8 @@ class ComplexType(Type):
 class EntityType(BasicType):
   def __str__(self):
     return "e"
+
+  __repr__ = __str__
 
   def str(self):
     return "IND"
