@@ -1412,7 +1412,7 @@ class IndividualVariableExpression(AbstractVariableExpression):
                     raise RuntimeError("Missing declared variable type for %s" % self.variable)
 
         if not other_type.matches(self.variable.type):
-            raise TypeResolutionException(self.variable.type, other_type)
+            raise TypeResolutionException(self.variable, other_type)
         # if not other_type.matches(ENTITY_TYPE):
         #     raise IllegalTypeException(self, other_type, ENTITY_TYPE)
 
