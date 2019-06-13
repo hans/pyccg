@@ -846,7 +846,7 @@ def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
 
 
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
-                      model, likelihood_fns, queue_limit=5):
+                      model, likelihood_fns, queue_limit=5, max_expr_depth=6):
   """
   Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
   for each of `tokens`.
@@ -867,6 +867,10 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       `candidate_meanings`, yielding a single semantic analysis of the sentence
       `candidate_semantic_parse`. The function should return a log-likelihood
       `p(candidate_meanings | candidate_syntaxes, sentence, model)`.
+    queue_limit: For any token, the maximum number of top-probability candidate
+      lexical entries to return
+    max_expr_depth: When enumerating semantic expressions, limit expression
+      tree depth to this number.
 
   Returns:
     queues: A dictionary mapping each query token to a ranked sequence of
@@ -918,7 +922,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
         for result, apparent_types in results:
           candidate_exprs = [list(ontology.iter_expressions(
-                              max_depth=3, type_request=apparent_types[token]))
+                              max_depth=max_expr_depth,
+                              type_request=apparent_types[token]))
                              for token in token_comb]
 
           n_expr_combs = np.prod(list(map(len, candidate_exprs)))
