@@ -1427,18 +1427,10 @@ class IndividualVariableExpression(AbstractVariableExpression):
         """:see: Expression.constants()"""
         return set()
 
-class FunctionVariableExpression(AbstractVariableExpression):
+class FunctionVariableExpression(IndividualVariableExpression):
     """This class represents variables that take the form of a single uppercase
     character followed by zero or more digits."""
-    type = ANY_TYPE
-
-    def free(self):
-        """:see: Expression.free()"""
-        return set([self.variable])
-
-    def constants(self):
-        """:see: Expression.constants()"""
-        return set()
+    pass
 
 class EventVariableExpression(IndividualVariableExpression):
     """This class represents variables that take the form of a single lowercase
@@ -2500,6 +2492,17 @@ class Ontology(object):
       if isinstance(node, ApplicationExpression):
         fn_name = node.pred.variable.name
 
+        # Variable is used as a function
+        if fn_name == variable_name:
+          arg_types = []
+          for arg in node.args:
+            if isinstance(arg, ConstantExpression) and arg.variable.name in self.constants_dict:
+              arg_types.append(self.constants_dict[arg.variable.name].type)
+            else:
+              arg_types.append(arg.type or ANY_TYPE)
+
+          apparent_types.add(self.types[tuple(arg_types) + ("e",)])
+
         try:
           function_type = self.functions_dict[fn_name].type
         except KeyError:
@@ -2520,26 +2523,25 @@ class Ontology(object):
             # We've found a use of the value as a function argument -- extract
             # the apparent type.
             apparent_types.add(function_type.flat[i])
-          elif isinstance(arg, ApplicationExpression) and isinstance(arg.pred, FunctionVariableExpression) \
+          elif isinstance(arg, ApplicationExpression) and isinstance(arg.pred, AbstractVariableExpression) \
               and arg.pred.variable.name == variable_name:
             arg_types = ((ANY_TYPE,) * len(arg.args))
-            apparent_types.add(arg_types + (function_type.flat[i],))
+            apparent_types.add(self.types[arg_types + (function_type.flat[i],)])
       elif isinstance(node, LambdaExpression):
         visitor(node.term)
 
     visitor(expr)
     if len(apparent_types) > 1:
-      if len(apparent_types) == 2 and ANY_TYPE in apparent_types:
-        # Good, just remove the AnyType.
-        apparent_types.remove(ANY_TYPE)
-      else:
-        # TODO check type compatibility
+      # Attempt type resolution.
+      resolution = self.types.resolve_types(apparent_types)
+      if resolution is None:
         raise InconsistentTypeHierarchyException(variable_name, expr)
     elif len(apparent_types) == 0:
-      return ANY_TYPE
+      resolution = ANY_TYPE
+    else:
+      resolution = next(iter(apparent_types))
 
-    type_ret = next(iter(apparent_types))
-    return self.types[type_ret]
+    return self.types[resolution]
 
   @property
   def observed_argument_types(self):
