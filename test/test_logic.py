@@ -65,6 +65,24 @@ def test_type_match():
   ok_(not ont.constants_dict["baz"].type.matches(ont.constants_dict["qux"].type),
       "'boolean' and 'obj' types should not match")
 
+  ok_(ont.types["?"].matches(ont.types["boolean"]),
+       "wildcard basic type matches in both directions")
+  ok_(ont.types["boolean"].matches(ont.types["?"]),
+       "wildcard basic type matches in both directions")
+  ok_(not ont.types["?"].matches(ont.types["boolean", "boolean"]),
+       "wildcard basic type does not match with complex types")
+  ok_(not ont.types["?"].matches(ont.types["?", "?"]),
+       "wildcard basic type does not match with complex types")
+
+  ok_(ont.types["*"].matches(ont.types["?"]),
+       "wildcard type matches with wildcard basic type")
+  ok_(ont.types["?"].matches(ont.types["*"]),
+       "wildcard type matches with wildcard basic type")
+  ok_(ont.types["*"].matches(ont.types["boolean"]),
+       "wildcard type matches with basic types")
+  ok_(ont.types["*"].matches(ont.types["boolean", "boolean"]),
+       "wildcard type matches with complex types")
+
 
 def test_get_expr_arity():
   ont = _make_simple_mock_ontology()

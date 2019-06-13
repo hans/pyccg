@@ -677,7 +677,7 @@ class BasicType(Type):
   __hash__ = Type.__hash__
 
   def matches(self, other):
-    ret = other == ANY_TYPE or self == other \
+    ret = other == ANY_BASIC_TYPE or other == ANY_TYPE or self == other \
         or any(my_parent == other for my_parent in self.parents)
     return ret
 
@@ -722,11 +722,9 @@ class ComplexType(Type):
   __hash__ = Type.__hash__
 
   def matches(self, other):
-    if isinstance(other, ComplexType):
-      return self.first.matches(other.first) and \
-              self.second.matches(other.second)
-    else:
-        return self == ANY_TYPE
+    return isinstance(other, ComplexType) and \
+        self.first.matches(other.first) and \
+        self.second.matches(other.second)
 
   def resolve(self, other):
     if other == ANY_TYPE:
@@ -738,8 +736,6 @@ class ComplexType(Type):
         return ComplexType(f,s)
       else:
         return None
-    elif self == ANY_TYPE:
-      return other
     else:
       return None
 
@@ -802,6 +798,8 @@ class AnyBasicType(BasicType):
   def __str__(self):
     return "?"
 
+  __repr__ = __str__
+
   def str(self):
     return "ANY_BASIC"
 
@@ -831,6 +829,8 @@ class AnyType(BasicType, ComplexType):
 
   def __str__(self):
     return "*"
+
+  __repr__ = __str__
 
   def str(self):
     return "ANY"
