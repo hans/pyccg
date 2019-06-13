@@ -709,8 +709,20 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
     if lexicon.ontology is not None:
       # Retrieve apparent types of each token's dummy var.
       sem = result.label()[0].semantics()
-      apparent_types = {token: lexicon.ontology.infer_type(sem, var.name)
-                        for token, var in dummy_vars.items()}
+
+      # TODO order of type inference really matters here -- there can be
+      # dependencies.
+      #
+      # e.g. for an expression `F000(F001)` where F001 is of type `?`, we need
+      # to infer `F000 :: ? -> e` before `F001`, otherwise we'll overwrite
+      # `F001` type
+      apparent_types = {}
+      for token, var in dummy_vars.items():
+        # Build up type signature from previously inferred types.
+        extra_types = {dummy_vars[token].name: apparent_type
+                       for token, apparent_type in apparent_types.items()}
+        apparent_types[token] = lexicon.ontology.infer_type(sem, var.name,
+                                                            extra_types=extra_types)
 
     yield result, apparent_types
 
