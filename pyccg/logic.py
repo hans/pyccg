@@ -2443,17 +2443,7 @@ class Ontology(object):
               valid = self._valid_lambda_expr(candidate, bound_vars)
               # print("\t" * (6 - max_depth), "valid lambda %s? %s" % (candidate, valid))
               if valid:
-                # Assign variable types before returning.
-                extra_types = {bound_var.name: bound_var.type
-                               for bound_var in subexpr_bound_vars}
-
-                try:
-                  # TODO make sure variable names are unique before this happens
-                  self.typecheck(candidate, extra_types)
-                except InconsistentTypeHierarchyException:
-                  pass
-                else:
-                  yield candidate
+                yield candidate
       elif expr_type == IndividualVariableExpression:
         # Yield bound variables.
         for bound_var in bound_vars:
