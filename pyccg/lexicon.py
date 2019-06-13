@@ -952,14 +952,6 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
               sentence_semantics = sentence_semantics.replace(dummy_var, token_expr)
             sentence_semantics = sentence_semantics.simplify()
 
-            # TODO find a better type-resolution solution. The current one will
-            # be super slow -- we can pre-compute most of the relevant types
-            # except for the item swapped in.
-            try:
-              lex.ontology.typecheck(sentence_semantics)
-            except l.TypeException:
-              continue
-
             # Compute p(meaning | syntax, sentence, parse)
             logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
                                     sentence_semantics, model)
