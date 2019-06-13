@@ -2640,17 +2640,6 @@ class Ontology(object):
       # Skip pointless identity function \z1.z1, etc.
       return False
 
-    # Find bound variables in body.
-    bound_variables = set(body.variables())
-    # Remove ontology members.
-    bound_variables = set(var for var in bound_variables
-                          if var.name not in self.functions_dict)
-
-    # Exclude exprs which do not use all of their bound arguments.
-    available_vars = set(bound_args) | set(ctx_bound_vars)
-    if available_vars != bound_variables:
-      return False
-
     # Exclude unnecessarily curried expressions, e.g.
     # `\x.exists(x)` (vs. `exists`)
     if isinstance(body, ApplicationExpression) \
@@ -2659,9 +2648,16 @@ class Ontology(object):
       if arg_variables == bound_args:
         return False
 
-    # # Exclude exprs with simplistic bodies.
-    # if isinstance(body, IndividualVariableExpression):
-    #   return False
+    # Find bound variables in body.
+    bound_variables = set(body.free())
+    # Remove ontology members.
+    bound_variables = set(var for var in bound_variables
+                          if var.name not in self.functions_dict)
+
+    # Exclude exprs which do not use all of their bound arguments.
+    available_vars = set(bound_args) | set(ctx_bound_vars)
+    if available_vars != bound_variables:
+      return False
 
     return True
 
