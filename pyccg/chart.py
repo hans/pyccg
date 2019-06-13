@@ -346,17 +346,13 @@ class BinaryCombinatorRule(CCGChartRule):
 
     # Check if the two edges are permitted to combine.
     # If so, generate the corresponding edge.
-    print(self._combinator, left_edge.semantics(), right_edge.semantics())
     can_combine = self._combinator.can_combine(left_edge, right_edge)
-    print("\t\t", can_combine)
     if can_combine:#self._combinator.can_combine(left_edge, right_edge):
       for categ, semantics in self._combinator.combine(left_edge, right_edge):
         new_edge = CCGEdge(span=(left_edge.start(), right_edge.end()),
                  categ=categ, semantics=semantics,
                  rule=self._combinator)
-        print("\t\t", semantics, semantics.type if semantics is not None else "")
         if chart.insert(new_edge,(left_edge,right_edge)):
-          print("\t\t\tgood")
           yield new_edge
 
   # The representation of the combinator (for printing derivations)
