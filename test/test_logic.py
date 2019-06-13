@@ -315,6 +315,22 @@ def test_infer_type():
     yield do_test, expr, query_variable, expected_type
 
 
+def test_resolve_types():
+  ontology = _make_mock_ontology()
+  def do_test(type_set, expected_type):
+    result_type = ontology.types.resolve_types(type_set)
+    eq_(result_type, expected_type)
+
+  cases = [
+    ({ontology.types["?"], ontology.types["boolean"]}, ontology.types["boolean"]),
+    ({ontology.types["?", "?"], ontology.types["?", "boolean"]}, ontology.types["?", "boolean"]),
+    ({ontology.types["boolean", "boolean"], ontology.types["?", "?"]}, ontology.types["boolean", "boolean"]),
+  ]
+
+  for type_set, expected_type in cases:
+    yield do_test, type_set, expected_type
+
+
 def test_expression_bound():
   eq_(set(x.name for x in Expression.fromstring(r"\x.foo(x)").bound()),
       {"x"})

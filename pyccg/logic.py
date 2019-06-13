@@ -1940,6 +1940,24 @@ class TypeSystem(object):
     type = self[type]
     return Variable(name, type)
 
+  def resolve_types(self, types):
+    """
+    Given a set of `Type`s, find the most specific type expression compatible
+    with all of the given types. If not possible, returns `None`.
+    """
+    # Hacky exhaustive search solution right now. There is a better way, but I
+    # don't want to engineer at the moment. NB, current solution will NOT scale
+    # to large type sets!
+    for ordering in itertools.permutations(types):
+      resolution = ordering[0]
+      for next_type in ordering[1:]:
+        resolution = resolution.resolve(next_type)
+        if resolution is None:
+          break
+
+      if resolution is not None:
+        return resolution
+
 
 class ConstantSystem(object):
   def __init__(self, constants):
