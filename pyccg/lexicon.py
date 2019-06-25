@@ -933,8 +933,9 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
         category_parse_results[syntax_comb] = results
 
         for result, apparent_types in results:
-          L.debug("Searching for expressions of types: %s",
-                  ";".join(str(apparent_types[token]) for token in token_comb))
+          L.debug("Searching for expressions with types: %s",
+                  ";".join("%s: %s" % (token, apparent_types[token])
+                           for token in token_comb))
           candidate_exprs = [list(ontology.iter_expressions(
                               max_depth=max_expr_depth,
                               type_request=apparent_types[token]))
