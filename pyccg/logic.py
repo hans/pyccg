@@ -2364,98 +2364,19 @@ class Ontology(object):
 
     for expr_type in self.EXPR_TYPES:
       if expr_type == ApplicationExpression:
-        # Loop over functions according to their weights.
-        fn_weight_key = (lambda fn: function_weights[fn.name]) if function_weights is not None \
-                        else (lambda fn: fn.weight)
-        fns_sorted = sorted(self.functions_dict.values(), key=fn_weight_key,
-                            reverse=True)
-
-        if max_depth > 1:
-          for fn in fns_sorted:
-            # If there is a present type request, only consider functions with
-            # the correct return type.
-            # print("\t" * (6 - max_depth), fn.name, fn.return_type, " // request: ", type_request, bound_vars)
-            if type_request is not None and not fn.return_type.matches(type_request):
-              continue
-
-            # Special case: yield fast event queries without recursion.
-            if fn.arity == 1 and fn.arg_types[0] == self.types.EVENT_TYPE:
-              yield self._make_application(fn.name, (ConstantExpression(Variable("e")),))
-            elif fn.arity == 0:
-              # 0-arity functions are represented in the logic as
-              # `ConstantExpression`s.
-              # print("\t" * (6 - max_depth + 1), "yielding const ", fn.name)
-              yield ConstantExpression(Variable(fn.name))
-            else:
-              # print("\t" * (6 - max_depth), fn, fn.arg_types)
-
-              all_arg_type_requests = list(fn.arg_types)
-
-              def product_sub_args(i, ret, nuce):
-                """
-                Iterate over the product of all possible argument sequences.
-                """
-                if i >= len(all_arg_type_requests):
-                  yield ret
-                  return
-
-                arg_type_request = all_arg_type_requests[i]
-                results = self._iter_expressions_inner(max_depth=max_depth - 1,
-                                                       bound_vars=bound_vars,
-                                                       type_request=arg_type_request,
-                                                       function_weights=function_weights,
-                                                       use_unused_constants=use_unused_constants,
-                                                       newly_used_constants_expr=frozenset(nuce))
-                for expr in results:
-                  # only track constant usage if necessary.
-                  new_nuce = nuce
-                  if use_unused_constants:
-                    new_nuce = new_nuce | {c.name for c in expr.constants()}
-
-                  yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
-
-              for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
-                candidate = self._make_application(fn.name, arg_combs)
-                valid = self._valid_application_expr(candidate)
-                # print("\t" * (6 - max_depth + 1), "valid %s? %s" % (candidate, valid))
-                if valid:
-                  yield candidate
+        yield from self._iter_application_exprs(max_depth=max_depth,
+                                                bound_vars=bound_vars,
+                                                type_request=type_request,
+                                                function_weights=function_weights,
+                                                use_unused_constants=use_unused_constants,
+                                                newly_used_constants_expr=newly_used_constants_expr)
       elif expr_type == LambdaExpression and max_depth > 1:
-        if type_request is None or not isinstance(type_request, ComplexType):
-          continue
-
-        for num_args in range(1, len(type_request.flat)):
-          for bound_var_types in itertools.product(self.observed_argument_types, repeat=num_args):
-            # TODO typecheck with type request
-
-            bound_vars = list(bound_vars)
-            subexpr_bound_vars = []
-            for new_type in bound_var_types:
-              subexpr_bound_vars.append(next_bound_var(bound_vars + subexpr_bound_vars, new_type))
-            all_bound_vars = tuple(bound_vars + subexpr_bound_vars)
-
-            if type_request is not None:
-              # TODO strong assumption -- assumes that lambda variables are used first
-              subexpr_type_request_flat = type_request.flat[num_args:]
-              subexpr_type_request = self.types[subexpr_type_request_flat]
-            else:
-              subexpr_type_request = None
-
-            results = self._iter_expressions_inner(max_depth=max_depth - 1,
-                                                   bound_vars=all_bound_vars,
-                                                   type_request=subexpr_type_request,
-                                                   function_weights=function_weights,
-                                                   use_unused_constants=use_unused_constants,
-                                                   newly_used_constants_expr=newly_used_constants_expr)
-
-            for expr in results:
-              candidate = expr
-              for var in subexpr_bound_vars:
-                candidate = LambdaExpression(var, candidate)
-              valid = self._valid_lambda_expr(candidate, bound_vars)
-              # print("\t" * (6 - max_depth), "valid lambda %s? %s" % (candidate, valid))
-              if valid:
-                yield candidate
+        yield from self._iter_lambda_exprs(max_depth=max_depth,
+                                           bound_vars=bound_vars,
+                                           type_request=type_request,
+                                           function_weights=function_weights,
+                                           use_unused_constants=use_unused_constants,
+                                           newly_used_constants_expr=newly_used_constants_expr)
       elif expr_type == IndividualVariableExpression:
         # Yield bound variables.
         for bound_var in bound_vars:
@@ -2496,6 +2417,104 @@ class Ontology(object):
               continue
 
             yield ConstantExpression(constant)
+
+  def _iter_application_exprs(self, max_depth, bound_vars, type_request,
+                              function_weights, use_unused_constants,
+                              newly_used_constants_expr):
+    # Loop over functions according to their weights.
+    fn_weight_key = (lambda fn: function_weights[fn.name]) if function_weights is not None \
+                    else (lambda fn: fn.weight)
+    fns_sorted = sorted(self.functions_dict.values(), key=fn_weight_key,
+                        reverse=True)
+
+    if max_depth > 1:
+      for fn in fns_sorted:
+        # If there is a present type request, only consider functions with
+        # the correct return type.
+        # print("\t" * (6 - max_depth), fn.name, fn.return_type, " // request: ", type_request, bound_vars)
+        if type_request is not None and not fn.return_type.matches(type_request):
+          continue
+
+        # Special case: yield fast event queries without recursion.
+        if fn.arity == 1 and fn.arg_types[0] == self.types.EVENT_TYPE:
+          yield self._make_application(fn.name, (ConstantExpression(Variable("e")),))
+        elif fn.arity == 0:
+          # 0-arity functions are represented in the logic as
+          # `ConstantExpression`s.
+          # print("\t" * (6 - max_depth + 1), "yielding const ", fn.name)
+          yield ConstantExpression(Variable(fn.name))
+        else:
+          # print("\t" * (6 - max_depth), fn, fn.arg_types)
+
+          all_arg_type_requests = list(fn.arg_types)
+
+          def product_sub_args(i, ret, nuce):
+            """
+            Iterate over the product of all possible argument sequences.
+            """
+            if i >= len(all_arg_type_requests):
+              yield ret
+              return
+
+            arg_type_request = all_arg_type_requests[i]
+            results = self._iter_expressions_inner(max_depth=max_depth - 1,
+                                                    bound_vars=bound_vars,
+                                                    type_request=arg_type_request,
+                                                    function_weights=function_weights,
+                                                    use_unused_constants=use_unused_constants,
+                                                    newly_used_constants_expr=frozenset(nuce))
+            for expr in results:
+              # only track constant usage if necessary.
+              new_nuce = nuce
+              if use_unused_constants:
+                new_nuce = new_nuce | {c.name for c in expr.constants()}
+
+              yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
+
+          for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
+            candidate = self._make_application(fn.name, arg_combs)
+            valid = self._valid_application_expr(candidate)
+            # print("\t" * (6 - max_depth + 1), "valid %s? %s" % (candidate, valid))
+            if valid:
+              yield candidate
+
+  def _iter_lambda_exprs(self, max_depth, bound_vars, type_request,
+                         function_weights, use_unused_constants,
+                         newly_used_constants_expr):
+    if type_request is None or not isinstance(type_request, ComplexType):
+      return
+
+    for num_args in range(1, len(type_request.flat)):
+      for bound_var_types in itertools.product(self.observed_argument_types, repeat=num_args):
+        # TODO typecheck with type request
+        bound_vars = list(bound_vars)
+        subexpr_bound_vars = []
+        for new_type in bound_var_types:
+          subexpr_bound_vars.append(next_bound_var(bound_vars + subexpr_bound_vars, new_type))
+        all_bound_vars = tuple(bound_vars + subexpr_bound_vars)
+
+        if type_request is not None:
+          # TODO strong assumption -- assumes that lambda variables are used first
+          subexpr_type_request_flat = type_request.flat[num_args:]
+          subexpr_type_request = self.types[subexpr_type_request_flat]
+        else:
+          subexpr_type_request = None
+
+        results = self._iter_expressions_inner(max_depth=max_depth - 1,
+                                                bound_vars=all_bound_vars,
+                                                type_request=subexpr_type_request,
+                                                function_weights=function_weights,
+                                                use_unused_constants=use_unused_constants,
+                                                newly_used_constants_expr=newly_used_constants_expr)
+
+        for expr in results:
+          candidate = expr
+          for var in subexpr_bound_vars:
+            candidate = LambdaExpression(var, candidate)
+          valid = self._valid_lambda_expr(candidate, bound_vars)
+          # print("\t" * (6 - max_depth), "valid lambda %s? %s" % (candidate, valid))
+          if valid:
+            yield candidate
 
   def typecheck(self, expr, extra_type_signature=None):
     type_signature = self._nltk_type_signature
