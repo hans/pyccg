@@ -2074,8 +2074,7 @@ class Function(object):
 def make_application(pred, args):
   pred = ConstantExpression(Variable(pred)) if isinstance(pred, str) else pred
   expr = ApplicationExpression(pred, args[0])
-  return functools.reduce(lambda x, y: ApplicationExpression(x, y),
-                          args[1:], expr)
+  return functools.reduce(ApplicationExpression, args[1:], expr)
 
 
 def next_bound_var(bound_vars, type):
@@ -2293,6 +2292,13 @@ class Ontology(object):
     self.functions.extend(new_functions)
     self.functions_dict.update({fn.name: fn for fn in functions})
 
+    # Prepare `Expression` representations for each function -- this saves a
+    # bunch of time during enumeration.
+    self._function_exprs = {
+        fn.name: ConstantExpression(Variable(fn.name, type=fn.type))
+        for fn in functions
+    }
+
     for function in functions:
       # We can't statically verify the type of the definition, but we can at
       # least verify the arity.
@@ -2374,7 +2380,7 @@ class Ontology(object):
 
             # Special case: yield fast event queries without recursion.
             if fn.arity == 1 and fn.arg_types[0] == self.types.EVENT_TYPE:
-              yield make_application(fn.name, (ConstantExpression(Variable("e")),))
+              yield self._make_application(fn.name, (ConstantExpression(Variable("e")),))
             elif fn.arity == 0:
               # 0-arity functions are represented in the logic as
               # `ConstantExpression`s.
@@ -2382,11 +2388,13 @@ class Ontology(object):
               yield ConstantExpression(Variable(fn.name))
             else:
               # print("\t" * (6 - max_depth), fn, fn.arg_types)
-              sub_args = []
 
               all_arg_type_requests = list(fn.arg_types)
 
               def product_sub_args(i, ret, nuce):
+                """
+                Iterate over the product of all possible argument sequences.
+                """
                 if i >= len(all_arg_type_requests):
                   yield ret
                   return
@@ -2399,11 +2407,15 @@ class Ontology(object):
                                                        use_unused_constants=use_unused_constants,
                                                        newly_used_constants_expr=frozenset(nuce))
                 for expr in results:
-                  new_nuce = nuce | {c.name for c in expr.constants()}
+                  # only track constant usage if necessary.
+                  new_nuce = nuce
+                  if use_unused_constants:
+                    new_nuce = new_nuce | {c.name for c in expr.constants()}
+
                   yield from product_sub_args(i + 1, ret + (expr, ), new_nuce)
 
               for arg_combs in product_sub_args(0, tuple(), newly_used_constants_expr):
-                candidate = make_application(fn.name, arg_combs)
+                candidate = self._make_application(fn.name, arg_combs)
                 valid = self._valid_application_expr(candidate)
                 # print("\t" * (6 - max_depth + 1), "valid %s? %s" % (candidate, valid))
                 if valid:
@@ -2719,6 +2731,23 @@ class Ontology(object):
 
     return inner(expr, [])
 
+  def _make_application(self, pred_name, args):
+    """
+    Generate an `ApplicationExpression` with the given predicate and argument
+    sequence. If `pred_name` is a member of the ontology, automatically
+    typechecks.
+    """
+    if pred_name in self._function_exprs:
+      pred = self._function_exprs[pred_name]
+    else:
+      pred = ConstantExpression(Variable(pred_name))
+
+    expr = ApplicationExpression(pred, args[0])
+    for arg in args[1:]:
+      expr = ApplicationExpression(expr, arg)
+    return expr
+    return functools.reduce(ApplicationExpression, args[1:], expr)
+
   def unwrap_function(self, function):
     """
     Given a function of this ontology, return an "unwrapped" `LambdaExpression`
@@ -2731,7 +2760,7 @@ class Ontology(object):
 
     if len(variables) > 0:
       # TODO make sure applicationexpression is properly typed
-      core = make_application(function, [IndividualVariableExpression(v) for v in variables])
+      core = self._make_application(function, [IndividualVariableExpression(v) for v in variables])
       ret = core
       for variable in variables[::-1]:
         ret = LambdaExpression(variable, ret)
