@@ -604,3 +604,21 @@ def test_iter_application_splits_sound_repeated():
         new_all_splits |= set(ontology.iter_application_splits(node))
 
     all_splits = new_all_splits
+
+
+def test_get_depths():
+  ontology = _make_simple_mock_ontology()
+
+  def do_test(expr, search, expected):
+    depths = get_depths(Expression.fromstring(expr), search)
+    eq_(depths, expected)
+
+  cases = [
+      (r"\z1.z1", "z1", {0: 1, 1: 1}),
+      (r"\z1.unique(z1)", "z1", {0: 1, 2: 1}),
+      (r"\z1.and_(z1,z1)", "z1", {0: 1, 2: 2}),
+      (r"\z1.and_(z1,and_(z1,baz))", "z1", {0: 1, 2: 1, 3: 1}),
+  ]
+
+  for expr, search, expected in cases:
+    yield do_test, expr, search, expected
