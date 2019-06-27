@@ -1674,6 +1674,19 @@ class VariableBinderExpression(Expression):
         """:see: Expression.visit_structured()"""
         return combinator(self.variable, function(self.term))
 
+    def decompose(self):
+        """
+        Decompose this expression into a sequence of its arguments and its body.
+        """
+        cls = self.__class__
+        variables = [self.variable]
+        node = self.term
+        while isinstance(node, cls):
+          variables.append(node.variable)
+          node = node.term
+
+        return variables, node
+
     def __eq__(self, other):
         r"""Defines equality modulo alphabetic variance.  If we are comparing
         \x.M  and \y.N, then check equality of M and N[x/y]."""
@@ -1723,11 +1736,7 @@ class LambdaExpression(VariableBinderExpression):
             raise TypeResolutionException(self, other_type)
 
     def __str__(self):
-        variables = [self.variable]
-        term = self.term
-        while term.__class__ == self.__class__:
-            variables.append(term.variable)
-            term = term.term
+        variables, term = self.decompose()
         return Tokens.LAMBDA + ' '.join("%s" % v for v in variables) + \
                Tokens.DOT + "%s" % term
 
@@ -1748,11 +1757,7 @@ class QuantifiedExpression(VariableBinderExpression):
         self.term._set_type(TRUTH_TYPE, signature)
 
     def __str__(self):
-        variables = [self.variable]
-        term = self.term
-        while term.__class__ == self.__class__:
-            variables.append(term.variable)
-            term = term.term
+        variables, term = self.decompose()
         return self.getQuantifier() + ' ' + ' '.join("%s" % v for v in variables) + \
                Tokens.DOT + "%s" % term
 
@@ -2727,12 +2732,7 @@ class Ontology(object):
     """
 
     # Collect bound arguments and the body expression.
-    bound_args = []
-    expr = lambda_expr
-    while isinstance(expr, LambdaExpression):
-      bound_args.append(expr.variable)
-      expr = expr.term
-    body = expr
+    bound_args, body = lambda_expr.decompose()
 
     if isinstance(body, IndividualVariableExpression):
       # Skip pointless identity function \z1.z1, etc.
