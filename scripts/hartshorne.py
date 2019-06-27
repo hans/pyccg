@@ -1,5 +1,6 @@
 """
-Kline evaluation with provisional lexicon given in the CogSci2019 submission.
+Proof-of-concept syntactic bootstrapping with a prominence preservation
+constraint.
 """
 
 
