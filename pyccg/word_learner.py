@@ -8,7 +8,7 @@ from pyccg.lexicon import predict_zero_shot, \
     get_candidate_categories, get_semantic_arity, \
     augment_lexicon_distant, augment_lexicon_cross_situational, augment_lexicon_2afc, \
     augment_lexicon_unification, \
-    build_bootstrap_likelihood
+    build_bootstrap_likelihood, likelihood_prominence
 from pyccg.perceptron import \
     update_perceptron_distant, update_perceptron_cross_situational, update_perceptron_2afc, \
     update_perceptron_supervised
@@ -30,7 +30,8 @@ class WordLearner(object):
                prune_entries=None,
                zero_shot_limit=5,
                max_expr_depth=6,
-               limit_induction=False):
+               limit_induction=False,
+               preserve_prominence=True):
     """
     Args:
       lexicon:
@@ -41,6 +42,7 @@ class WordLearner(object):
     self.lexicon = lexicon
 
     self.bootstrap = bootstrap
+    self.preserve_prominence = preserve_prominence
 
     # Learning hyperparameters
     self.learning_rate = learning_rate
@@ -156,6 +158,8 @@ class WordLearner(object):
         self.lexicon, sentence, self.ontology,
         alpha=self.bootstrap_alpha,
         meaning_prior_smooth=self.meaning_prior_smooth))
+    if self.preserve_prominence:
+      ret.append(likelihood_prominence)
 
     return ret
 

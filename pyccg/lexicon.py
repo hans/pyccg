@@ -936,7 +936,8 @@ def build_bootstrap_likelihood(lex, sentence, ontology,
            ", ".join("%.03f %s" % (prob, pred) for pred, prob
                      in sorted(lf_ngrams[category].items(), key=lambda x: x[1], reverse=True)))
 
-  def likelihood_fn(tokens, categories, exprs, sentence_parse, model):
+  def likelihood_fn(tokens, categories, exprs, sentence_parse,
+                    sentence_semantics, model):
     likelihood = 0.0
     for token, category, expr in zip(tokens, categories, exprs):
       # Retrieve relevant bootstrap distribution p(meaning | syntax).
@@ -950,13 +951,14 @@ def build_bootstrap_likelihood(lex, sentence, ontology,
   return likelihood_fn
 
 
-def likelihood_scene(tokens, categories, exprs, sentence_parse, model):
+def likelihood_scene(tokens, categories, exprs, sentence_parse,
+                     sentence_semantics, model):
   """
   0-1 likelihood function, 1 when a sentence is true of the model and false
   otherwise.
   """
   try:
-    return 0. if model.evaluate(sentence_parse) == True else -np.inf
+    return 0. if model.evaluate(sentence_semantics) == True else -np.inf
   except:
     return -np.inf
 
@@ -972,9 +974,10 @@ def build_distant_likelihood(answer):
   Returns:
     likelihood_fn: A likelihood function to be used with `predict_zero_shot`.
   """
-  def likelihood_fn(tokens, categories, exprs, sentence_parse, model):
+  def likelihood_fn(tokens, categories, exprs, sentence_parse,
+                    sentence_semantics, model):
     try:
-      success = model.evaluate(sentence_parse) == answer
+      success = model.evaluate(sentence_semantics) == answer
     except:
       success = None
 
@@ -983,7 +986,8 @@ def build_distant_likelihood(answer):
   return likelihood_fn
 
 
-def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
+def likelihood_2afc(tokens, categories, exprs, sentence_parse,
+                    sentence_semantics, models):
   """
   0-1 likelihood function for the 2AFC paradigm, where an uttered
   sentence is known to be true of at least one of two scenes.
@@ -996,15 +1000,50 @@ def likelihood_2afc(tokens, categories, exprs, sentence_parse, models):
   """
   model1, model2 = models
   try:
-    model1_success = model1.evaluate(sentence_parse) == True
+    model1_success = model1.evaluate(sentence_semantics) == True
   except:
     model1_success = None
   try:
-    model2_success = model2.evaluate(sentence_parse) == True
+    model2_success = model2.evaluate(sentence_semantics) == True
   except:
     model2_success = None
 
   return 0. if model1_success or model2_success else -np.inf
+
+
+def likelihood_prominence(tokens, categories, exprs, sentence_parse,
+                          sentence_semantics, model):
+  """
+  Likelihood function which enforces prominence preservation in the
+  syntax--semantics mapping.
+
+  (For any two arguments a, b, if a >= b in the derivation, then it must be
+  that a >= b in the meaning representation.)
+  """
+  for expr in exprs:
+    if not isinstance(expr, l.LambdaExpression):
+      continue
+
+    # Get semantic tree depths for each argument.
+    args, body = expr.decompose()
+    semantic_depths = {arg: l.get_depths(expr, arg) for arg in args}
+    # Get max semantic depth for each argument.
+    semantic_depths = {arg: max(depths.keys())
+                       for arg, depths in semantic_depths.items()}
+
+    # Syntactic height simply corresponds to reverse argument order -- earlier
+    # == lower.
+    # TODO re-evaluate this definition.
+    syntactic_depths = {arg: len(args) - i for i, arg in enumerate(args)}
+
+    # Enforce prominence principle. If a < b in the derivation, then a <= b in
+    # the semantics.
+    for arg1, arg2 in itertools.permutations(args, 2):
+      if syntactic_depths[arg1] < syntactic_depths[arg2] \
+          and not semantic_depths[arg1] <= semantic_depths[arg2]:
+        return -np.inf
+
+  return 0.
 
 
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
@@ -1024,11 +1063,13 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       `p(meanings | syntaxes, sentence, model)` used to score candidate
       meaning--syntax settings for a subset of `tokens`.  Each function should
       accept arguments `(tokens, candidate_categories, candidate_meanings,
-      candidate_semantic_parse, model)`, where `tokens` are assigned specific
-      categories given in `candidate_categories` and specific meanings given in
-      `candidate_meanings`, yielding a single semantic analysis of the sentence
-      `candidate_semantic_parse`. The function should return a log-likelihood
-      `p(candidate_meanings | candidate_syntaxes, sentence, model)`.
+      candidate_syntactic_parse, candidate_semantic_parse, model)`, where
+      `tokens` are assigned specific categories given in `candidate_categories`
+      and specific meanings given in `candidate_meanings`, yielding a single
+      syntactic analysis `candidate_syntactic_parse` and semantic analysis
+      `candidate_semantic_parse` of the sentence. The function should return a
+      log-likelihood `p(candidate_meanings | candidate_syntaxes, sentence,
+      model)`.
     queue_limit: For any token, the maximum number of top-probability candidate
       lexical entries to return
     max_expr_depth: When enumerating semantic expressions, limit expression
@@ -1100,7 +1141,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
 
             # Compute p(meaning | syntax, sentence, parse)
             logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
-                                    sentence_semantics, model)
+                                     result, sentence_semantics, model)
                       for likelihood_fn in likelihood_fns)
             likelihood += np.exp(logp)
 
