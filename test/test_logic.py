@@ -615,9 +615,12 @@ def test_get_depths():
 
   cases = [
       (r"\z1.z1", "z1", {0: 1, 1: 1}),
+      (r"\z1.z1", Variable("z1"), {0: 1, 1: 1}),
       (r"\z1.unique(z1)", "z1", {0: 1, 2: 1}),
       (r"\z1.and_(z1,z1)", "z1", {0: 1, 2: 2}),
       (r"\z1.and_(z1,and_(z1,baz))", "z1", {0: 1, 2: 1, 3: 1}),
+      (r"\z2 z1.cause(unique(toy),cause(unique(female),cause(unique(toy),become(z2,z1))))", "z1", {0: 1, 5: 1}),
+      (r"\z2 z1.cause(unique(toy),cause(unique(female),cause(unique(toy),become(z2,z1))))", "z2", {0: 1, 5: 1}),
   ]
 
   for expr, search, expected in cases:

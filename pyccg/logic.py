@@ -2289,23 +2289,23 @@ def get_depths(expression, search_expr):
   Get the depths at which a given `search_expr` is used within `expression`.
   """
   depths = Counter()
+  search_expr = str(search_expr)
 
   def visitor(node, depth):
-    if isinstance(search_expr, str):
-      if isinstance(node, AbstractVariableExpression) and search_expr == node.variable.name:
-        depths[depth] += 1
-      elif isinstance(node, Variable) and search_expr == node.name:
-        depths[depth] += 1
-    elif node == search_expr:
+    if isinstance(node, AbstractVariableExpression) and search_expr == node.variable.name:
+      depths[depth] += 1
+    elif isinstance(node, Variable) and search_expr == node.name:
       depths[depth] += 1
 
     if isinstance(node, ApplicationExpression):
       visitor(node.pred, depth)
       for arg in node.args:
         visitor(arg, depth + 1)
-    elif isinstance(node, LambdaExpression):
-      visitor(node.variable, depth)
-      visitor(node.term, depth + 1)
+    elif isinstance(node, VariableBinderExpression):
+      args, body = node.decompose()
+      for arg in args:
+        visitor(arg, depth)
+      visitor(body, depth + 1)
 
   visitor(expression, 0)
   return depths
