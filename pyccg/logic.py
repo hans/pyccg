@@ -2162,83 +2162,6 @@ def get_arity(expr):
     return 0
 
 
-def read_ec_sexpr(sexpr):
-  """
-  Parse an EC-style S-expression into an untyped NLTK representation.
-  """
-  tokens = re.split(r"([()\s])", sexpr)
-
-  bound_vars = set()
-  bound_var_stack = []
-
-  is_call = False
-  stack = [(None, None, [])]
-  for token in tokens:
-    token = token.strip()
-    if not token:
-      continue
-
-    if token == "(":
-      if is_call:
-        # Second consecutive left-paren -- this means we have a complex
-        # function expression.
-        stack.append((ApplicationExpression, None, []))
-      is_call = True
-    elif token == "lambda":
-      is_call = False
-      variable = next_bound_var(bound_vars, ANY_TYPE)
-      bound_vars.add(variable)
-      bound_var_stack.append(variable)
-
-      stack.append((LambdaExpression, None, []))
-    elif is_call:
-      head = token
-      if head.startswith("$"):
-        bruijn_index = int(head[1:])
-        # Bound variable is the head of an application expression.
-        # First replace with a function-looking variable, then update parser
-        # state.
-        var_idx = -1 - bruijn_index
-        var = bound_var_stack[var_idx]
-        bound_vars.remove(var)
-
-        new_var = Variable(var.name.upper())
-        bound_var_stack[var_idx] = new_var
-        bound_vars.add(new_var)
-
-        head = FunctionVariableExpression(new_var)
-
-      stack.append((ApplicationExpression, head, []))
-      is_call = False
-    elif token == ")":
-      stack_top = stack.pop()
-      if stack_top[0] == ApplicationExpression:
-        _, pred, args = stack_top
-        result = make_application(pred, args)
-      elif stack_top[0] == LambdaExpression:
-        _, _, term = stack_top
-        variable = bound_var_stack.pop()
-        result = LambdaExpression(variable, term[0])
-      else:
-        raise RuntimeError("unknown element on stack", stack_top)
-
-      stack_parent = stack[-1]
-      if stack_parent[0] == ApplicationExpression and stack_parent[1] is None:
-        # We have just finished reading the head of an application expression.
-        expr, _, args = stack_parent
-        stack[-1] = (expr, result, args)
-      else:
-        # Add to children of parent node.
-        stack_parent[2].append(result)
-    elif token.startswith("$"):
-      bruijn_index = int(token[1:])
-      stack[-1][2].append(IndividualVariableExpression(bound_var_stack[-1 - bruijn_index]))
-    else:
-      stack[-1][2].append(ConstantExpression(Variable(token)))
-
-  assert len(stack) == 1
-  assert len(stack[0][2]) == 1
-  return stack[0][2][0], bound_vars
 
 
 class Ontology(object):
@@ -2749,6 +2672,89 @@ class Ontology(object):
         raise ValueError("un-handled expression component %r" % expr)
 
     return inner(expr, [])
+
+  def read_ec_sexpr(self, sexpr):
+    """
+    Parse an EC-style S-expression into a typed pyccg logic representation.
+    """
+    tokens = re.split(r"([()\s])", sexpr)
+
+    bound_vars = set()
+    bound_var_stack = []
+
+    is_call = False
+    stack = [(None, None, [])]
+    for token in tokens:
+      token = token.strip()
+      if not token:
+        continue
+
+      if token == "(":
+        if is_call:
+          # Second consecutive left-paren -- this means we have a complex
+          # function expression.
+          stack.append((ApplicationExpression, None, []))
+        is_call = True
+      elif token == "lambda":
+        is_call = False
+        variable = next_bound_var(bound_vars, ANY_TYPE)
+        bound_vars.add(variable)
+        bound_var_stack.append(variable)
+
+        stack.append((LambdaExpression, None, []))
+      elif is_call:
+        head = token
+        if head.startswith("$"):
+          bruijn_index = int(head[1:])
+          # Bound variable is the head of an application expression. First
+          # replace with a function-looking variable, then update parser state.
+          var_idx = -1 - bruijn_index
+          var = bound_var_stack[var_idx]
+          bound_vars.remove(var)
+
+          new_var = Variable(var.name.upper())
+          bound_var_stack[var_idx] = new_var
+          bound_vars.add(new_var)
+
+          head = FunctionVariableExpression(new_var)
+
+        stack.append((ApplicationExpression, head, []))
+        is_call = False
+      elif token == ")":
+        stack_top = stack.pop()
+        if stack_top[0] == ApplicationExpression:
+          _, pred, args = stack_top
+          result = make_application(pred, args)
+        elif stack_top[0] == LambdaExpression:
+          _, _, term = stack_top
+          variable = bound_var_stack.pop()
+          result = LambdaExpression(variable, term[0])
+        else:
+          raise RuntimeError("unknown element on stack", stack_top)
+
+        stack_parent = stack[-1]
+        if stack_parent[0] == ApplicationExpression and stack_parent[1] is None:
+          # We have just finished reading the head of an application expression.
+          expr, _, args = stack_parent
+          stack[-1] = (expr, result, args)
+        else:
+          # Add to children of parent node.
+          stack_parent[2].append(result)
+      elif token.startswith("$"):
+        # Variable reference.
+        bruijn_index = int(token[1:])
+        variable = bound_var_stack[-1 - bruijn_index]
+        stack[-1][2].append(IndividualVariableExpression(variable))
+      else:
+        stack[-1][2].append(ConstantExpression(Variable(token)))
+
+    assert len(stack) == 1
+    assert len(stack[0][2]) == 1
+
+    # Now run type-inference.
+    expr = stack[0][2][0]
+    self.typecheck(expr)
+    return expr, bound_vars
 
   def _make_application(self, pred_name, args):
     """

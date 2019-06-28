@@ -234,8 +234,10 @@ def test_as_ec_sexpr_event():
 
 
 def test_read_ec_sexpr():
-  expr, bound_vars = read_ec_sexpr("(lambda (lambda (lambda (foo (bar $0 $1) (baz $1 $2) blah))))")
-  eq_(expr, Expression.fromstring(r"\a b c.foo(bar(c,b),baz(b,a),blah)"))
+  ontology = _make_simple_mock_ontology()
+  expr, bound_vars = ontology.read_ec_sexpr(
+      "(lambda (lambda (lambda (and_ (threeplace $0 qux $1) (and_ (foo $2) baz)))))")
+  eq_(expr, Expression.fromstring(r"\a b c.and_(threeplace(c,qux,b),and_(foo(a),baz))"))
   eq_(len(bound_vars), 3)
 
 
@@ -243,9 +245,11 @@ def test_read_ec_sexpr_de_bruijn():
   """
   properly handle de Bruijn indexing in EC lambda expressions.
   """
-  expr, bound_vars = read_ec_sexpr("(lambda ((lambda ($0 (lambda $0))) (lambda ($1 $0))))")
+  ontology = _make_simple_mock_ontology()
+  expr, bound_vars = ontology.read_ec_sexpr("(lambda ((lambda ($0 (lambda $0))) (lambda ($1 $0))))")
   print(expr)
   eq_(expr, Expression.fromstring(r"\A.((\B.B(\C.C))(\C.A(C)))"))
+  eq_(len(bound_vars), 4)
 
 
 def test_read_ec_sexpr_nested():
@@ -254,13 +258,38 @@ def test_read_ec_sexpr_nested():
   itself is an expression (i.e. there is some not-yet-reduced beta reduction
   candidate).
   """
-  expr, bound_vars = read_ec_sexpr("(lambda ((lambda (foo $0)) $0))")
-  eq_(expr, Expression.fromstring(r"\a.((\b.foo(b))(a))"))
+  ontology = _make_simple_mock_ontology()
+  expr, bound_vars = ontology.read_ec_sexpr("(lambda ((lambda (abc $0)) $0))")
+  eq_(expr, Expression.fromstring(r"\a.((\b.abc(b))(a))"))
+  eq_(len(bound_vars), 2)
 
 
 def test_read_ec_sexpr_higher_order_param():
-  expr, bound_vars = read_ec_sexpr("(lambda (lambda ($0 $1)))")
+  ontology = _make_simple_mock_ontology()
+  expr, bound_vars = ontology.read_ec_sexpr("(lambda (lambda ($0 $1)))")
   eq_(expr, Expression.fromstring(r"\a P.P(a)"))
+  eq_(len(bound_vars), 2)
+
+
+def test_read_ec_sexpr_typecheck():
+  ontology = _make_simple_mock_ontology()
+
+  expr, bound_vars = ontology.read_ec_sexpr("(lambda (foo $0))")
+  eq_(expr.type, ontology.types["obj", "boolean"],
+      "read_ec_sexpr runs type inference")
+  eq_(expr.term.type, ontology.types["boolean"])
+  bound_var, = bound_vars
+  eq_(bound_var.type, ontology.types["obj"],
+      "read_ec_sexpr infers types of bound variables")
+
+
+def test_read_ec_sexpr_typecheck_complex():
+  ontology = _make_mock_ontology()
+  expr, bound_vars = ontology.read_ec_sexpr(
+      "(lambda (unique (lambda (and_ (cube $0) (ltzero (cmp_pos ax_x $0 $1))))))")
+  eq_(expr.type, ontology.types["obj", "obj"])
+  eq_(len(bound_vars), 2)
+  eq_([var.type for var in bound_vars], [ontology.types["obj"]] * len(bound_vars))
 
 
 def test_valid_lambda_expr():
