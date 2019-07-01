@@ -416,7 +416,7 @@ def eval_2afc_zeroshot(learner, example, expected_idx, asserts=True):
             "Top model is expected for \"%s\"" % " ".join(sentence))
 
 
-def eval_model(bootstrap=True, **learner_kwargs):
+def eval_model(bootstrap=False, **learner_kwargs):
   L.info("Building model.")
 
   learner_kwargs["limit_induction"] = True

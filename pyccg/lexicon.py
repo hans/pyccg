@@ -1146,7 +1146,8 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
             likelihood += np.exp(logp)
 
             # Add category priors.
-            log_prior = sum(np.log(weight) for weight in syntax_weights)
+            # log_prior = sum(np.log(weight) for weight in syntax_weights)
+            log_prior = 0.
             if log_prior == -np.inf or likelihood == 0:
               # Zero probability. Skip.
               continue
