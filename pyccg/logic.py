@@ -1491,9 +1491,7 @@ class ConstantExpression(AbstractVariableExpression):
 
         resolution = ANY_TYPE
         if other_type != ANY_TYPE:
-            resolution = other_type
-            if self.type != ENTITY_TYPE:
-                resolution = resolution.resolve(self.type)
+            resolution = other_type.resolve(self.type)
 
         for varEx in signature[self.variable.name]:
             # print("\t", varEx, varEx.type, resolution)
