@@ -677,7 +677,7 @@ class BasicType(Type):
   __hash__ = Type.__hash__
 
   def matches(self, other):
-    ret = other == ANY_BASIC_TYPE or other == ANY_TYPE or self == other \
+    ret = other is None or other == ANY_BASIC_TYPE or other == ANY_TYPE or self == other \
         or any(my_parent == other for my_parent in self.parents)
     return ret
 
@@ -727,7 +727,7 @@ class ComplexType(Type):
         self.second.matches(other.second)
 
   def resolve(self, other):
-    if other == ANY_TYPE:
+    if other is None or other == ANY_TYPE:
       return self
     elif isinstance(other, ComplexType):
       f = self.first.resolve(other.first)
@@ -1480,8 +1480,8 @@ class EventVariableExpression(IndividualVariableExpression):
 class ConstantExpression(AbstractVariableExpression):
     """This class represents variables that do not take the form of a single
     character followed by zero or more digits."""
-    type = ENTITY_TYPE
 
+    def _get_type(self): return self.variable.type
     def _set_type(self, other_type=ANY_TYPE, signature=None):
         """:see Expression._set_type()"""
         assert isinstance(other_type, Type)
@@ -1502,9 +1502,11 @@ class ConstantExpression(AbstractVariableExpression):
             if not resolution:
                 raise InconsistentTypeHierarchyException(self)
 
-        signature[self.variable.name].extend([self, self.variable])
+        signature[self.variable.name].append(self.variable)
         for varEx in signature[self.variable.name]:
             varEx.type = resolution
+
+    type = property(_get_type, _set_type)
 
     def free(self):
         """:see: Expression.free()"""
