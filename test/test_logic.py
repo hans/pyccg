@@ -404,8 +404,13 @@ def test_unwrap_base_functions():
 def test_lf_parts():
   cases = [
     (r"filter_shape(scene,sphere)",
-     ("sphere", "scene", r"\z1.filter_shape(scene,z1)", r"\z1.filter_shape(z1,sphere)"),
-     ()),
+      {"sphere", "scene", r"filter_shape",
+       r"\z1.filter_shape(scene,z1)", r"\z1.filter_shape(z1,sphere)"},
+      {}),
+    (r"unique(\z1.and_(house(z1),horse(z1)))",
+      {"house", "horse", "unique", "and_", r"\z1.and_(house(z1),horse(z1))",
+       r"\z1 z2 z3.and_(z1(z3),z2(z3))"},
+      {}),
   ]
 
   def do_test(expression, expected_members, expected_non_members):
