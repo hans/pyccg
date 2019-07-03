@@ -1502,7 +1502,7 @@ class ConstantExpression(AbstractVariableExpression):
             if not resolution:
                 raise InconsistentTypeHierarchyException(self)
 
-        signature[self.variable.name].append(self)
+        signature[self.variable.name].extend([self, self.variable])
         for varEx in signature[self.variable.name]:
             varEx.type = resolution
 
