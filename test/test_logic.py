@@ -399,3 +399,25 @@ def test_unwrap_base_functions():
       r"unique(\z1.sphere(z1))")
   eq_(str(ontology.unwrap_base_functions(Expression.fromstring(r"cmp_pos(ax_x,unique(sphere),unique(cube))"))),
       r"cmp_pos(ax_x,unique(\z1.sphere(z1)),unique(\z1.cube(z1)))")
+
+
+def test_lf_parts():
+  cases = [
+    (r"filter_shape(scene,sphere)",
+     ("sphere", "scene", r"\z1.filter_shape(scene,z1)", r"\z1.filter_shape(z1,sphere)"),
+     ()),
+  ]
+
+  def do_test(expression, expected_members, expected_non_members):
+    expr = Expression.fromstring(expression)
+    parts = lf_parts(expr)
+    part_strs = [str(part) for part in parts]
+    print(part_strs)
+
+    for el in expected_members:
+      ok_(el in part_strs, el)
+    for el in expected_non_members:
+      ok_(el not in part_strs, el)
+
+  for expr, expected, expected_not in cases:
+    yield do_test, expr, expected, expected_not
