@@ -2812,6 +2812,119 @@ class Ontology(object):
 
     return expr
 
+  def iter_application_splits(self, expr):
+    """
+    Iterate over all splits of the given `expr` which could yield `expr` by
+    function application.
+    """
+    # TODO also should jointly split syntax!
+
+    # TODO: should probably expect inputs to be typechecked
+    self.typecheck(expr)
+
+    # Get all sub-expressions, tracking the immediate parent and active bound
+    # variables in each.
+    subexprs = set()
+    def visit(node, parent, bound_vars=()):
+      if isinstance(node, IndividualVariableExpression) and node.variable in bound_vars:
+        return
+
+      subexprs.add((node, parent, bound_vars))
+
+      if isinstance(node, LambdaExpression):
+        bound_vars = bound_vars + (node.variable,)
+        visit(node.term, node, bound_vars)
+      elif isinstance(node, ApplicationExpression):
+        if isinstance(node.function, ConstantExpression):
+          # NB dropping bound variables in this recursive call.
+          # `parent` value here specifies that the application expression is
+          # the parent, and the child is in function position.
+          visit(node.function, (node, -1))
+
+        for i, arg in enumerate(node.args):
+          # use `parent` to record the position of each argument (makes
+          # replacement later much easier)
+          visit(arg, (node, i), bound_vars)
+
+    visit(expr, None)
+
+    for subexpr, parent, bound_vars in subexprs:
+      # TODO do extraction of all subsets of application arguments
+      # not doing this means we miss a majority of candidates
+
+      all_vars = bound_vars + tuple([x for x in subexpr.predicates()])
+      # TODO iterate over all permutations of all subsets of `all_vars`,
+      # swapping out
+      # TODO just n=3 for now
+      for var_set in itertools.permutations(all_vars, 3):
+        if [var.name for var in var_set] != ["z1", "cube", "sphere"]:
+          # DEV
+          continue
+        # Make the logical expression that will be pulled out by adding
+        # arguments for each of all_vars.
+        new_functee = subexpr
+        # Create bound variables for each of the variables in our set.
+        new_vars = [unique_variable(type=var.type) for var in var_set]
+        for var, new_var in zip(var_set, new_vars):
+          new_functee = new_functee.replace(var, IndividualVariableExpression(new_var))
+        # Functee is now fully abstract -- now include those bound variables.
+        for new_var in new_vars[::-1]:
+          new_functee = LambdaExpression(new_var, new_functee)
+
+        # Specify the function that, when applied to `new_functee`, will
+        # recreate `subexpr`.
+        new_variable_type = self.types[tuple(var.type for var in var_set) + subexpr.type.flat]
+        new_variable = unique_variable(type=new_variable_type)
+
+        # Now specify the replacement expression, which is the application of
+        # `var_set` to `new_variable`.
+        wrapped_variable = IndividualVariableExpression(new_variable)
+        wrapped_args = [ConstantExpression(v) if v.name in self.functions_dict
+                        else IndividualVariableExpression(v)
+                        for v in var_set]
+        replacement_expression = make_application(wrapped_variable, wrapped_args)
+
+        # Create the new functor representation, which will become the
+        # semantics of one of the split elements. Replaces `subexpr` with
+        # `replacement_expression` in the original `expr`.
+        #
+        # Replace in-place `subexpr` under its immediate parent, deepcopy the
+        # result, and swap back the old thing.
+
+        # TODO there should be some better Pythonic way to do this..
+        if parent is None:
+          # DEV make this work.
+          continue
+          # subexpr == expr
+          new_functor = LambdaExpression(new_variable, replacement_expression)
+        elif isinstance(parent, tuple) and isinstance(parent[0], ApplicationExpression):
+          node, idx = parent
+          if idx == -1:
+            old_function = node.function
+            node.function = replacement_expression
+            functor = deepcopy(expr)
+            node.function = old_function
+          else:
+            old_arg = node.args[idx]
+            node.args[idx] = replacement_expression
+            functor = deepcopy(expr)
+            node.args[idx] = old_arg
+        elif isinstance(parent, LambdaExpression):
+          old_term = parent.term
+          parent.term = replacement_expression
+          functor = deepcopy(expr)
+          parent.term = old_term
+        else:
+          raise ValueError("unknown parent type %s: %s" % (type(parent), parent))
+        functor = LambdaExpression(new_variable, functor)
+
+        # Now functor and functee are candidate inputs to application which
+        # will yield `expr`. Check this ...
+        # reapplied = ApplicationExpression(functor, new_functee).simplify()
+        # assert expr == reapplied
+        yield functor, new_functee, "/"
+        yield new_functee, functor, "\\"
+
 
 def compute_type_raised_semantics(semantics):
   core = deepcopy(semantics)
@@ -2831,6 +2944,8 @@ def compute_type_raised_semantics(semantics):
     semantics = core
 
   return LambdaExpression(var, semantics)
+
+
 
 
 def lf_parts(expr):

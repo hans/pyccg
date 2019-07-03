@@ -401,6 +401,30 @@ def test_unwrap_base_functions():
       r"cmp_pos(ax_x,unique(\z1.sphere(z1)),unique(\z1.cube(z1)))")
 
 
+def test_iter_application_splits():
+  ontology = _make_mock_ontology()
+  cases = [
+    (r"unique(\z1.and_(cube(z1),sphere(z1)))",
+      {"cube", "sphere", "unique", "and_", r"\z1.and_(cube(z1),sphere(z1))",
+       r"\z1 z2 z3.and_(z1(z3),z2(z3))"},
+      {}),
+  ]
+
+  def do_test(expression, expected_members, expected_non_members):
+    expr = Expression.fromstring(expression)
+    parts = list(ontology.iter_application_splits(expr))
+    part_strs = [str(part) for part in parts]
+    print(part_strs)
+
+    for el in expected_members:
+      ok_(el in part_strs, el)
+    for el in expected_non_members:
+      ok_(el not in part_strs, el)
+
+  for expr, expected, expected_not in cases:
+    yield do_test, expr, expected, expected_not
+
+
 def test_lf_parts():
   cases = [
     (r"filter_shape(scene,sphere)",
