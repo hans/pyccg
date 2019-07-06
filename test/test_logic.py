@@ -402,24 +402,26 @@ def test_unwrap_base_functions():
 
 
 def test_iter_application_splits():
+  # TODO test that, for every split, application on split parts yields a
+  # subexpression
   ontology = _make_mock_ontology()
   cases = [
-    (r"unique(\z1.and_(cube(z1),sphere(z1)))",
-      {"cube", "sphere", "unique", "and_", r"\z1.and_(cube(z1),sphere(z1))",
-       r"\z1 z2 z3.and_(z1(z3),z2(z3))"},
+    (r"unique(\a.and_(cube(a),sphere(a)))",
+      {(r"\z1.unique(\a.z1(cube,sphere,a))", r"\z1 z2 z3.and_(z1(z3),z2(z3))", "/"),},
       {}),
   ]
 
   def do_test(expression, expected_members, expected_non_members):
     expr = Expression.fromstring(expression)
-    parts = list(ontology.iter_application_splits(expr))
-    part_strs = [str(part) for part in parts]
-    print(part_strs)
+    splits = list(ontology.iter_application_splits(expr))
+    split_tuples = [(str(part1), str(part2), dir) for part1, part2, dir in splits]
+    from pprint import pprint
+    pprint(split_tuples)
 
     for el in expected_members:
-      ok_(el in part_strs, el)
+      ok_(el in split_tuples, el)
     for el in expected_non_members:
-      ok_(el not in part_strs, el)
+      ok_(el not in split_tuples, el)
 
   for expr, expected, expected_not in cases:
     yield do_test, expr, expected, expected_not

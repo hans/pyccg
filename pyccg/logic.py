@@ -2857,14 +2857,12 @@ class Ontology(object):
       # swapping out
       # TODO just n=3 for now
       for var_set in itertools.permutations(all_vars, 3):
-        if [var.name for var in var_set] != ["z1", "cube", "sphere"]:
-          # DEV
-          continue
         # Make the logical expression that will be pulled out by adding
         # arguments for each of all_vars.
         new_functee = subexpr
         # Create bound variables for each of the variables in our set.
-        new_vars = [unique_variable(type=var.type) for var in var_set]
+        new_vars = [Variable("z%i" % (idx + 1), type=var.type)
+                    for idx, var in enumerate(var_set)]
         for var, new_var in zip(var_set, new_vars):
           new_functee = new_functee.replace(var, IndividualVariableExpression(new_var))
         # Functee is now fully abstract -- now include those bound variables.
@@ -2874,7 +2872,7 @@ class Ontology(object):
         # Specify the function that, when applied to `new_functee`, will
         # recreate `subexpr`.
         new_variable_type = self.types[tuple(var.type for var in var_set) + subexpr.type.flat]
-        new_variable = unique_variable(type=new_variable_type)
+        new_variable = Variable("z1", type=new_variable_type)
 
         # Now specify the replacement expression, which is the application of
         # `var_set` to `new_variable`.
@@ -2922,6 +2920,7 @@ class Ontology(object):
         # will yield `expr`. Check this ...
         # reapplied = ApplicationExpression(functor, new_functee).simplify()
         # assert expr == reapplied
+
         yield functor, new_functee, "/"
         yield new_functee, functor, "\\"
 
