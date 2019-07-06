@@ -425,30 +425,3 @@ def test_iter_application_splits():
 
   for expr, expected, expected_not in cases:
     yield do_test, expr, expected, expected_not
-
-
-def test_lf_parts():
-  cases = [
-    (r"filter_shape(scene,sphere)",
-      {"sphere", "scene", r"filter_shape",
-       r"\z1.filter_shape(scene,z1)", r"\z1.filter_shape(z1,sphere)"},
-      {}),
-    (r"unique(\z1.and_(house(z1),horse(z1)))",
-      {"house", "horse", "unique", "and_", r"\z1.and_(house(z1),horse(z1))",
-       r"\z1 z2 z3.and_(z1(z3),z2(z3))"},
-      {}),
-  ]
-
-  def do_test(expression, expected_members, expected_non_members):
-    expr = Expression.fromstring(expression)
-    parts = lf_parts(expr)
-    part_strs = [str(part) for part in parts]
-    print(part_strs)
-
-    for el in expected_members:
-      ok_(el in part_strs, el)
-    for el in expected_non_members:
-      ok_(el not in part_strs, el)
-
-  for expr, expected, expected_not in cases:
-    yield do_test, expr, expected, expected_not
