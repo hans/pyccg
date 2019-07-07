@@ -425,3 +425,27 @@ def test_iter_application_splits():
 
   for expr, expected, expected_not in cases:
     yield do_test, expr, expected, expected_not
+
+
+def test_iter_application_splits_sound():
+  """
+  Every proposed split should, after application, yield a subexpression of the
+  original expression.
+  """
+
+  ontology = _make_mock_ontology()
+  cases = [
+    r"unique(\a.and_(cube(a),sphere(a)))",
+  ]
+
+  def do_test(expression):
+    expr = Expression.fromstring(expression)
+    subexprs = [str(x) for x, _, _ in get_subexpressions(expr)]
+
+    for part1, part2, dir in ontology.iter_application_splits(expr):
+      arg1, arg2 = (part1, part2) if dir == "/" else (part2, part1)
+      reapplied = str(ApplicationExpression(arg1, arg2).simplify())
+      ok_(reapplied in subexprs, "%s %s %s --> %s" % (part1, dir, part2, reapplied))
+
+  for expr in cases:
+    yield do_test, expr
