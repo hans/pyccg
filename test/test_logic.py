@@ -414,6 +414,31 @@ def test_unwrap_base_functions():
       r"cmp_pos(ax_x,unique(\z1.sphere(z1)),unique(\z1.cube(z1)))")
 
 
+def test_get_subexpressions():
+  ontology = _make_mock_ontology()
+
+  cases = [
+    (r"unique(\a.and_(cube(a),sphere(a)))",
+     {},
+     {
+       # weird bug -- predicate gets replaced
+       r"and_(cube(a),cube(a))"
+     }),
+  ]
+
+  def do_test(expr, assert_in, assert_not_in):
+    expr = Expression.fromstring(expr)
+    subexprs = [str(e) for e, _ in get_subexpressions(expr)]
+
+    for e in assert_in:
+      ok_(e in subexprs, e)
+    for e in assert_not_in:
+      ok_(e not in subexprs, e)
+
+  for expr, assert_in, assert_not_in in cases:
+    yield do_test, expr, assert_in, assert_not_in
+
+
 def test_iter_application_splits():
   # TODO test that, for every split, application on split parts yields a
   # subexpression
@@ -436,10 +461,14 @@ def test_iter_application_splits():
 
   def do_test(expression, expected_members, expected_non_members):
     expr = Expression.fromstring(expression)
-    splits = list(ontology.iter_application_splits(expr))
-    split_tuples = [(str(part1), str(part2), dir) for part1, part2, dir in splits]
-    from pprint import pprint
-    pprint(split_tuples)
+    split_tuples = []
+    # iterating with for-loop so that we can catch incremental yields -- easier
+    # to debug
+    for part1, part2, dir in ontology.iter_application_splits(expr):
+      # print("\t\t",part1, "\t", part2, "\t", dir)
+      split_tuples.append((str(part1), str(part2), dir))
+    # from pprint import pprint
+    # pprint(split_tuples)
 
     all_parts = set(part1 for part1, _, _ in split_tuples) | set(part2 for _, part2, _ in split_tuples)
 
@@ -475,7 +504,7 @@ def test_iter_application_splits_sound():
 
   def do_test(expression):
     expr = Expression.fromstring(expression)
-    subexprs = [str(x) for x, _, _ in get_subexpressions(expr)]
+    subexprs = [str(x) for x, _ in get_subexpressions(expr)]
 
     for part1, part2, dir in ontology.iter_application_splits(expr):
       arg1, arg2 = (part1, part2) if dir == "/" else (part2, part1)
@@ -484,3 +513,21 @@ def test_iter_application_splits_sound():
 
   for expr in cases:
     yield do_test, expr
+
+
+# def test_repeated_iter_application_splits():
+#   ontology = _make_mock_ontology()
+
+#   expr = r"unique(\a.and_(cube(a),sphere(a)))"
+#   expr = Expression.fromstring(expr)
+#   all_splits = {(expr, expr, None)}
+#   import time
+#   while True:
+#     new_all_splits = set()
+#     for left, right, _ in all_splits:
+#       new_all_splits |= set(ontology.iter_application_splits(left))
+#       new_all_splits |= set(ontology.iter_application_splits(right))
+
+#     print(len(new_all_splits))
+#     time.sleep(1)
+#     all_splits = new_all_splits

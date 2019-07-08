@@ -2211,6 +2211,8 @@ def get_subexpressions(expr, track_parents=False):
         visit(arg, (node, i), bound_vars)
 
   visit(expr, None)
+  if not track_parents:
+    subexprs = [(subexpr, bound_vars) for subexpr, _, bound_vars in subexprs]
   return subexprs
 
 
@@ -2886,12 +2888,12 @@ class Ontology(object):
     # TODO: should probably expect inputs to be typechecked
     self.typecheck(expr)
 
-    for subexpr, parent, bound_vars in get_subexpressions(expr):
+    for subexpr, parent, bound_vars in get_subexpressions(expr, track_parents=True):
       # Extract existing bound variables + some subset of predicates used in
       # the subexpression.
       free_vars = subexpr.predicates()
       min_free_vars = 1 if not bound_vars else 0
-      for num_free_vars in range(min_free_vars, len(free_vars)):
+      for num_free_vars in range(min_free_vars, len(free_vars) + 1):
         for free_var_set in itertools.combinations(free_vars, num_free_vars):
           all_vars = bound_vars + free_var_set
           for var_order in itertools.permutations(all_vars):
