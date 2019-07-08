@@ -1358,7 +1358,7 @@ class ApplicationExpression(Expression):
         n_arguments = len(self.args)
 
         application = self
-        for i in range(idx - n_arguments):
+        for i in range(n_arguments - idx - 1):
           if not isinstance(application, ApplicationExpression):
             raise ValueError("provided `idx` %i is greater than the number of arguments provided to %s"
                              % (idx, self))

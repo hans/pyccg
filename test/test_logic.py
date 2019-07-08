@@ -393,6 +393,12 @@ def test_set_argument():
   eq_(str(e), r"foo(a,b,d)")
 
 
+def test_set_argument0():
+  e = Expression.fromstring(r"foo(a,b,c)")
+  e.set_argument(0, Expression.fromstring("d"))
+  eq_(str(e), r"foo(d,b,c)")
+
+
 def test_unwrap_function():
   ontology = _make_mock_ontology()
 
