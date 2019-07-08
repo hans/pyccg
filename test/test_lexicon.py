@@ -423,7 +423,7 @@ def test_zero_shot_type_request():
 
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
-  eq_(kwargs["type_request"], ontology.types["boolean", "e"])
+  eq_(kwargs["type_request"], ontology.types["boolean", "*"])
 
 
 def test_zero_shot_type_request_2arg():
@@ -455,4 +455,4 @@ def test_zero_shot_type_request_2arg():
 
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
-  eq_(kwargs["type_request"], ontology.types["obj", "obj", "e"])
+  eq_(kwargs["type_request"], ontology.types["obj", "obj", "*"])
