@@ -414,7 +414,10 @@ def test_iter_application_splits():
   cases = [
     (r"unique(\a.and_(cube(a),sphere(a)))",
       {(r"\z1.unique(\a.z1(cube,sphere,a))", r"\z1 z2 z3.and_(z1(z3),z2(z3))", "/"),},
-      {}),
+      {
+        # should not yield exprs which don't use their bound variables
+        (r"\z1.unique(\a.and_(cube(a),sphere(a)))", None, None),
+      }),
   ]
 
   def do_test(expression, expected_members, expected_non_members):
@@ -424,10 +427,22 @@ def test_iter_application_splits():
     from pprint import pprint
     pprint(split_tuples)
 
+    all_parts = set(part1 for part1, _, _ in split_tuples) | set(part2 for _, part2, _ in split_tuples)
+
     for el in expected_members:
-      ok_(el in split_tuples, el)
+      if el[1] is None:
+        # just want to assert that a logical expr appears *somewhere*
+        ok_(el[0] in all_parts, el[0])
+      else:
+        # full split specified
+        ok_(el in split_tuples, el)
     for el in expected_non_members:
-      ok_(el not in split_tuples, el)
+      if el[1] is None:
+        # just want to assert that a logical expr appears *nowhere*
+        ok_(el[0] not in all_parts, el[0])
+      else:
+        # full split specified
+        ok_(el not in split_tuples, el)
 
   for expr, expected, expected_not in cases:
     yield do_test, expr, expected, expected_not

@@ -2884,11 +2884,8 @@ class Ontology(object):
     self.typecheck(expr)
 
     for subexpr, parent, bound_vars in get_subexpressions(expr):
-      # Case 1: Extract all subsets of application arguments in their entirety.
-      # TODO
-
-      # Case 2: Extract existing bound variables + some subset of predicates
-      # used in the subexpression.
+      # Extract existing bound variables + some subset of predicates used in
+      # the subexpression.
       free_vars = subexpr.predicates()
       min_free_vars = 1 if not bound_vars else 0
       for num_free_vars in range(min_free_vars, len(free_vars)):
@@ -2942,9 +2939,9 @@ class Ontology(object):
                 node.function = old_function
               else:
                 old_arg = node.args[idx]
-                node.args[idx] = replacement_expression
+                node.set_argument(idx, replacement_expression)
                 functor = deepcopy(expr)
-                node.args[idx] = old_arg
+                node.set_argument(idx, old_arg)
             elif isinstance(parent, LambdaExpression):
               old_term = parent.term
               parent.term = replacement_expression
