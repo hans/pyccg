@@ -245,7 +245,8 @@ class IntensionalModel(Model):
 initial_lexicon = Lexicon.fromstring(r"""
   :- S:N
 
-  push => S\N/N {\y x.cause(x,become(y,happiness))} <0.3>
+  push => (S\N)/N {\y x.cause(x,become(y,happiness))} <0.3>
+  dummy => (S/N)\N {foo} <0.3>
   the => N/N {\x.unique(x)} <1.1>
   girl => N {\x.female(x)} <0.6>
   toy => N {\x.toy(x)} <0.8>

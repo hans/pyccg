@@ -1031,12 +1031,12 @@ def likelihood_prominence(tokens, categories, exprs, sentence_parse,
     semantic_depths = {arg: max(depths.keys())
                        for arg, depths in semantic_depths.items()}
 
-    # NB `args` already encodes syntactic height -- earlier arguments must be
+    # NB `args` already encodes syntactic depth -- earlier arguments must be
     # syntactically lower than later arguments.
     # TODO re-evaluate this definition.
 
-    # Enforce prominence principle. If a > b in the derivation, then a >= b in
-    # the semantics.
+    # Enforce prominence principle. If a > b in derivation depth, then a >= b
+    # in semantic depth.
     for arg1, arg2 in zip(args, args[1:]):
       if not semantic_depths[arg1] >= semantic_depths[arg2]:
         return -np.inf
@@ -1230,6 +1230,17 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
 
   # Construct a new lexicon.
   for token, candidates in new_entries.items():
+    # HACK: post-hoc normalize by meaning. This should come out naturally once
+    # we have the right generative model defined earlier on.
+    meaning_masses = Counter()
+    for (_, meaning), weight in candidates.items():
+      meaning_masses[meaning] += weight
+    candidates = {(syntax, meaning): weight / meaning_masses[meaning]
+                  for (syntax, meaning), weight in candidates.items()}
+    from pprint import pprint
+    print()
+    pprint(meaning_masses)
+
     total_mass = sum(candidates.values())
     if len(candidates) > 0:
       lex.set_entries(token,
@@ -1238,7 +1249,7 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
 
       L.info("Inferred %i novel entries for token %s:", len(candidates), token)
       for entry, weight in sorted(candidates.items(), key=lambda x: x[1], reverse=True):
-        L.info("%.4f %s", weight / total_mass * beta, entry)
+        L.info("%.4f %s %s", weight / total_mass * beta, entry[0], entry[1])
 
   return lex
 
