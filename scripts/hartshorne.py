@@ -24,7 +24,7 @@ from pyccg.logic import TypeSystem, Ontology, NegatedExpression
 from pyccg.model import Model
 from pyccg.word_learner import WordLearner
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 L = logging.getLogger(__name__)
 
 

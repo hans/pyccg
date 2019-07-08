@@ -133,6 +133,9 @@ class WordLearner(object):
     query_tokens, query_token_syntaxes = \
         self.prepare_lexical_induction(sentence)
     L.info("Inducing new lexical entries for words: %s", ", ".join(query_tokens))
+    for q_token, q_syntaxes in query_token_syntaxes.items():
+      L.debug("Syntax distribution: %s -> %s",
+              q_token, {str(cat): weight for cat, weight in q_syntaxes.items()})
 
     # Augment the lexicon with all entries for novel words which yield the
     # correct answer to the sentence under some parse. Restrict the search by
@@ -141,10 +144,10 @@ class WordLearner(object):
     # HACK: For now, only induce one word meaning at a time.
     try:
       lex = augment_lexicon_fn(self.lexicon, query_tokens, query_token_syntaxes,
-                              sentence, self.ontology, model,
-                              self._build_likelihood_fns(sentence, model),
-                              beta=self.beta,
-                              **augment_lexicon_args)
+                               sentence, self.ontology, model,
+                               self._build_likelihood_fns(sentence, model),
+                               beta=self.beta,
+                               **augment_lexicon_args)
     except NoParsesError:
       L.warn("Failed to induce any novel meanings.")
       return self.lexicon

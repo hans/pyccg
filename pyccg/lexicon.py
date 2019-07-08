@@ -1031,16 +1031,14 @@ def likelihood_prominence(tokens, categories, exprs, sentence_parse,
     semantic_depths = {arg: max(depths.keys())
                        for arg, depths in semantic_depths.items()}
 
-    # Syntactic height simply corresponds to reverse argument order -- earlier
-    # == lower.
+    # NB `args` already encodes syntactic height -- earlier arguments must be
+    # syntactically lower than later arguments.
     # TODO re-evaluate this definition.
-    syntactic_depths = {arg: len(args) - i for i, arg in enumerate(args)}
 
-    # Enforce prominence principle. If a < b in the derivation, then a <= b in
+    # Enforce prominence principle. If a > b in the derivation, then a >= b in
     # the semantics.
-    for arg1, arg2 in itertools.permutations(args, 2):
-      if syntactic_depths[arg1] < syntactic_depths[arg2] \
-          and not semantic_depths[arg1] <= semantic_depths[arg2]:
+    for arg1, arg2 in zip(args, args[1:]):
+      if not semantic_depths[arg1] >= semantic_depths[arg2]:
         return -np.inf
 
   return 0.
