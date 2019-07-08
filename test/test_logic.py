@@ -356,7 +356,8 @@ def test_infer_type():
     (r"\a b.ltzero(cmp_pos(ax_x,a,b))", "a", ontology.types["obj"]),
     (r"\a b.ltzero(cmp_pos(ax_x,a,b))", "b", ontology.types["obj"]),
     (r"\A b.and_(ltzero(b),A(b))", "A", ontology.types[ontology.types.ANY_TYPE, "boolean"]),
-    (r"F00(one)", "F00", ontology.types["num", "e"]),
+    (r"F00(one)", "F00", ontology.types["num", "*"]),
+    (r"\F.unique(F(and_))", "F", ontology.types[("boolean", "boolean", "boolean"), ("obj", "boolean")]),
   ]
 
   for expr, query_variable, expected_type in cases:

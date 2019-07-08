@@ -2548,10 +2548,12 @@ class Ontology(object):
           for arg in node.args:
             if isinstance(arg, ConstantExpression) and arg.variable.name in self.constants_dict:
               arg_types.append(self.constants_dict[arg.variable.name].type)
+            elif isinstance(arg, ConstantExpression) and arg.variable.name in self.functions_dict:
+              arg_types.append(self.functions_dict[arg.variable.name].type)
             else:
               arg_types.append(arg.type or ANY_TYPE)
 
-          apparent_types.add(self.types[tuple(arg_types) + ("e",)])
+          apparent_types.add(self.types[tuple(arg_types) + ("*",)])
 
         try:
           function_type = self.functions_dict[fn_name].type
