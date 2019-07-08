@@ -1347,6 +1347,25 @@ class ApplicationExpression(Expression):
         """
         return self.uncurry()[1]
 
+    def set_argument(self, idx, expr):
+        """
+        Replace the argument at `idx` (in the uncurried form of this
+        application) with `expr`.
+
+        >>> Expression.fromstring("foo(a,b,c)").set_argument(2, Expression.fromstring("d"))
+        foo(a,b,d)
+        """
+        n_arguments = len(self.args)
+
+        application = self
+        for i in range(idx - n_arguments):
+          if not isinstance(application, ApplicationExpression):
+            raise ValueError("provided `idx` %i is greater than the number of arguments provided to %s"
+                             % (idx, self))
+          application = application.function
+
+        application.argument = expr
+
     def is_atom(self):
         """
         Is this expression an atom (as opposed to a lambda expression applied
