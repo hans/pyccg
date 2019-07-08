@@ -319,12 +319,12 @@ class LogicParser(object):
         accum = self.make_VariableExpression(tok)
         if self.inRange(0) and self.token(0) == Tokens.OPEN:
             #The predicate has arguments
-            if not isinstance(accum, FunctionVariableExpression) and \
-               not isinstance(accum, ConstantExpression):
-                raise LogicalExpressionException(self._currentIndex,
-                                     "'%s' is an illegal predicate name.  "
-                                     "Individual variables may not be used as "
-                                     "predicates." % tok)
+            # if not isinstance(accum, FunctionVariableExpression) and \
+            #    not isinstance(accum, ConstantExpression):
+            #     raise LogicalExpressionException(self._currentIndex,
+            #                          "'%s' is an illegal predicate name.  "
+            #                          "Individual variables may not be used as "
+            #                          "predicates." % tok)
             self.token() #swallow the Open Paren
 
             #curry the arguments
@@ -1893,6 +1893,7 @@ class ExpectedMoreTokensException(LogicalExpressionException):
 
 
 INDVAR_RE = re.compile(r'^[a-df-z]\d*$')
+INDVAR_TIGHT_RE = re.compile(r'^z(\d+)$')
 FUNCVAR_RE = re.compile(r'^[A-Z]\d*$')
 EVENTVAR_RE = re.compile(r'^e\d*$')
 def is_indvar(expr):
@@ -2897,6 +2898,7 @@ class Ontology(object):
             # Make the logical expression that will be pulled out by adding
             # arguments for each of all_vars.
             new_functee = subexpr
+
             # Create bound variables for each of the variables in our set.
             new_vars = [Variable("z%i" % (idx + 1), type=var.type)
                         for idx, var in enumerate(var_order)]
@@ -2906,10 +2908,17 @@ class Ontology(object):
             for new_var in new_vars[::-1]:
               new_functee = LambdaExpression(new_var, new_functee)
 
+            # Are there existing bound variables on the pattern `zx` which we
+            # should avoid shadowing within `subexpr`? If so, start counting
+            # above the maximal value.
+            existing_z_idxs = [INDVAR_TIGHT_RE.match(var.name) for var in bound_vars]
+            existing_z_idxs = [int(match.group(1)) for match in existing_z_idxs if match]
+            z_idx = max(existing_z_idxs) + 1 if existing_z_idxs else 1
+
             # Specify the function that, when applied to `new_functee`, will
             # recreate `subexpr`.
             new_variable_type = self.types[tuple(var.type for var in var_order) + subexpr.type.flat]
-            new_variable = Variable("z1", type=new_variable_type)
+            new_variable = Variable("z%i" % z_idx, type=new_variable_type)
 
             # Now specify the replacement expression, which is the application of
             # `var_order` to `new_variable`.
@@ -2931,15 +2940,17 @@ class Ontology(object):
               # DEV make this work.
               continue
               # subexpr == expr
-              new_functor = LambdaExpression(new_variable, replacement_expression)
+              functor = LambdaExpression(new_variable, replacement_expression)
             elif isinstance(parent, tuple) and isinstance(parent[0], ApplicationExpression):
               node, idx = parent
               if idx == -1:
+                # replacing at predicate site
                 old_function = node.function
                 node.function = replacement_expression
                 functor = deepcopy(expr)
                 node.function = old_function
               else:
+                # replacing at one of the arguments
                 old_arg = node.args[idx]
                 node.set_argument(idx, replacement_expression)
                 functor = deepcopy(expr)

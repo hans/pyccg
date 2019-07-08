@@ -419,6 +419,13 @@ def test_iter_application_splits():
         # should not yield exprs which don't use their bound variables
         (r"\z1.unique(\a.and_(cube(a),sphere(a)))", None, None),
       }),
+
+    (r"\z1.unique(z1(and_))",
+      {},
+      {
+        # should not shadow existing bound variables
+        (r"\z1 z1.z1(z1)", None, None),
+      }),
   ]
 
   def do_test(expression, expected_members, expected_non_members):
