@@ -374,12 +374,14 @@ def test_augment_lexicon_unification():
 
   sentence = "red AND white".split()
   lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  ontology.typecheck(lf)
   new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+  new_lex.prune()
 
   old_results = WeightedCCGChartParser(lex).parse(sentence)
   new_results = WeightedCCGChartParser(new_lex).parse(sentence)
-  eq_(len(old_results), 0)
-  ok_(len(new_results) > 0)
+  eq_(len(old_results), 0, "Parse should fail before augmenting")
+  ok_(len(new_results) > 0, "Parse should succeed after augmenting")
 
 
 def test_fromstring_typechecks():

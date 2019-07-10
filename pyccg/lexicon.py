@@ -797,7 +797,6 @@ def augment_lexicon_unification(lex, sentence, ontology, lf):
   # belong to any category.
   parses = get_syntactic_parses(lex, sentence, sentence)
   _, _, best_parse = max(parses, key=lambda parse: parse[0])
-  chart.printCCGDerivation(best_parse) # DEV
 
   lex = lex.clone()
   queue, new_entries = [(best_parse, lf)], set()
