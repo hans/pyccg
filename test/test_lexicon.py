@@ -362,6 +362,26 @@ def _make_simple_mock_ontology():
   return ontology
 
 
+def test_augment_lexicon_unification():
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S
+
+  and => S\S/S {\f g x.and_(f(x),g(x))}
+  blue => S {foo}
+  black => S {bar}
+  """, ontology=ontology, include_semantics=True)
+
+  sentence = "red AND white".split()
+  lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  old_results = WeightedCCGChartParser(lex).parse(sentence)
+  new_results = WeightedCCGChartParser(new_lex).parse(sentence)
+  eq_(len(old_results), 0)
+  ok_(len(new_results) > 0)
+
+
 def test_fromstring_typechecks():
   """
   Ensure that `Lexicon.fromstring` type-checks and assigns types to provided

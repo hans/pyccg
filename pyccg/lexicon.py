@@ -580,6 +580,40 @@ def set_yield(category, new_yield):
     raise ValueError("unknown category type of instance %r" % category)
 
 
+def get_syntactic_parses(lex, tokens, sentence, smooth=1e-3):
+  """
+  Find the weighted syntactic parses for `sentence`, inducing novel
+  syntactic entries for each of `tokens`.
+  """
+  assert set(tokens).issubset(set(sentence))
+
+  # Make a minimal copy of `lex` which does not track semantics.
+  lex = lex.clone(retain_semantics=False)
+
+  # Remove entries for the queried tokens.
+  for token in tokens:
+    lex.set_entries(token, [])
+
+  category_prior = lex.observed_category_distribution(
+      exclude_tokens=set(tokens), soft_propagate_roots=True)
+  if smooth is not None:
+    for key in category_prior.keys():
+      category_prior[key] += smooth
+    category_prior = category_prior.normalize()
+  L.debug("Smoothed category prior with soft root propagation: %s", category_prior)
+
+  def get_parses(cat_assignment):
+    for token, category in zip(tokens, cat_assignment):
+      lex.set_entries(token, [(category, None, category_prior[category])])
+
+    return chart.WeightedCCGChartParser(lex, chart.DefaultRuleSet) \
+        .parse(sentence, return_aux=True)
+
+  for cat_assignment in itertools.product(category_prior.keys(), repeat=len(tokens)):
+    for parse, weight, _ in get_parses(cat_assignment):
+      yield (weight, cat_assignment, parse)
+
+
 def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
   """
   Find candidate categories for the given tokens which appear in `sentence` such
@@ -752,6 +786,43 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
   # lexicon._entries[token] = []
   # return results, sub_target
+
+
+def augment_lexicon_unification(lex, sentence, ontology, lf):
+  """
+  Given a supervised `sentence -> lf` mapping, update the lexicon via a variant
+  of unification-GENLEX.
+  """
+  # compute possible syntactic parses, allowing all tokens in the sentence to
+  # belong to any category.
+  parses = get_syntactic_parses(lex, sentence, sentence)
+  _, _, best_parse = max(parses, key=lambda parse: parse[0])
+  chart.printCCGDerivation(best_parse) # DEV
+
+  lex = lex.clone()
+  queue, new_entries = [(best_parse, lf)], set()
+  while queue:
+    node, expr = queue.pop()
+    token, parse_op = node.label()
+    if parse_op == "Leaf":
+      new_entries.add((token._token, token.categ(), expr))
+      continue
+
+    # get left and right children
+    left, right = list(node)
+
+    for left_split, right_split, cand_direction in ontology.iter_application_splits(expr):
+      if parse_op == ">" and cand_direction != "/" \
+          or parse_op == "<" and cand_direction != "\\":
+        continue
+
+      queue.append((left, left_split))
+      queue.append((right, right_split))
+
+  for token, categ, semantics in new_entries:
+    lex.add_entry(token, categ, semantics=semantics, weight=0.001)
+
+  return lex
 
 
 def build_bootstrap_likelihood(lex, sentence, ontology,
