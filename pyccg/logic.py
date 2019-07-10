@@ -2958,7 +2958,7 @@ class Ontology(object):
       ret = core
       for variable in variables[::-1]:
         ret = LambdaExpression(variable, ret)
-      return ret.normalize()
+      return ret.normalize_inplace()
 
     return ConstantExpression(Variable(function))
 
