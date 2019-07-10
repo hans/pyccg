@@ -491,6 +491,20 @@ def test_iter_application_splits():
     yield do_test, expr, expected, expected_not
 
 
+def _test_application_split_sound(expr, ontology):
+  """
+  Evaluate soundness of `iter_application_splits` for a particular expression.
+  """
+  if isinstance(expr, str):
+    expr = Expression.fromstring(expr)
+  subexprs = [str(x) for x, _ in get_subexpressions(expr)]
+
+  for part1, part2, dir in ontology.iter_application_splits(expr):
+    arg1, arg2 = (part1, part2) if dir == "/" else (part2, part1)
+    reapplied = str(ApplicationExpression(arg1, arg2).simplify())
+    ok_(reapplied in subexprs, "%s %s %s --> %s" % (part1, dir, part2, reapplied))
+
+
 def test_iter_application_splits_sound():
   """
   Every proposed split should, after application, yield a subexpression of the
@@ -502,32 +516,27 @@ def test_iter_application_splits_sound():
     r"unique(\a.and_(cube(a),sphere(a)))",
   ]
 
-  def do_test(expression):
-    expr = Expression.fromstring(expression)
-    subexprs = [str(x) for x, _ in get_subexpressions(expr)]
-
-    for part1, part2, dir in ontology.iter_application_splits(expr):
-      arg1, arg2 = (part1, part2) if dir == "/" else (part2, part1)
-      reapplied = str(ApplicationExpression(arg1, arg2).simplify())
-      ok_(reapplied in subexprs, "%s %s %s --> %s" % (part1, dir, part2, reapplied))
-
   for expr in cases:
-    yield do_test, expr
+    yield _test_application_split_sound, expr, ontology
 
 
-# def test_repeated_iter_application_splits():
-#   ontology = _make_mock_ontology()
+def test_iter_application_splits_sound_repeated():
+  """
+  Verify that `iter_application_splits` is sound over repeated calls.
+  (the closure of an expression under `iter_application_splits` should still be
+  sound)
+  """
+  ontology = _make_mock_ontology()
 
-#   expr = r"unique(\a.and_(cube(a),sphere(a)))"
-#   expr = Expression.fromstring(expr)
-#   all_splits = {(expr, expr, None)}
-#   import time
-#   while True:
-#     new_all_splits = set()
-#     for left, right, _ in all_splits:
-#       new_all_splits |= set(ontology.iter_application_splits(left))
-#       new_all_splits |= set(ontology.iter_application_splits(right))
+  expr = r"unique(\a.and_(cube(a),sphere(a)))"
+  expr = Expression.fromstring(expr)
+  all_splits = {(expr, expr, None)}
+  for _ in range(2):
+    new_all_splits = set()
+    for left, right, _ in all_splits:
+      for node in [left, right]:
+        yield _test_application_split_sound, node, ontology
 
-#     print(len(new_all_splits))
-#     time.sleep(1)
-#     all_splits = new_all_splits
+        new_all_splits |= set(ontology.iter_application_splits(node))
+
+    all_splits = new_all_splits
