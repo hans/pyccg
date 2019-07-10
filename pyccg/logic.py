@@ -2883,38 +2883,52 @@ class Ontology(object):
     Iterate over all splits of the given `expr` which could yield `expr` by
     function application.
     """
-    # TODO also should jointly split syntax!
-
     # TODO: should probably expect inputs to be typechecked
     self.typecheck(expr)
 
-    for subexpr, parent, bound_vars in get_subexpressions(expr, track_parents=True):
+    for subexpr, parent, ctx_bound_vars in get_subexpressions(expr, track_parents=True):
       # Extract existing bound variables + some subset of predicates used in
       # the subexpression.
       free_vars = subexpr.predicates()
-      min_free_vars = 1 if not bound_vars else 0
+      min_free_vars = 1 if not ctx_bound_vars else 0
       for num_free_vars in range(min_free_vars, len(free_vars) + 1):
         for free_var_set in itertools.combinations(free_vars, num_free_vars):
-          all_vars = bound_vars + free_var_set
+          all_vars = ctx_bound_vars + free_var_set
           for var_order in itertools.permutations(all_vars):
             # Make the logical expression that will be pulled out by adding
             # arguments for each of all_vars.
             new_functee = subexpr
 
+            # Are there existing bound variables on the pattern `zx` which we
+            # should avoid shadowing within our rewrite of `subexpr`?
+            #
+            # We don't want to shadow (1) variables bound in the context
+            # containing `subexpr` (i.e. `ctx_bound_vars`), or variables bound
+            # within `subexpr`.
+            existing_z_idxs = [INDVAR_TIGHT_RE.match(var.name)
+                               for var in ctx_bound_vars + tuple(subexpr.bound())]
+            existing_z_idxs = set(int(match.group(1)) for match in existing_z_idxs if match)
+
             # Create bound variables for each of the variables in our set.
-            new_vars = [Variable("z%i" % (idx + 1), type=var.type)
-                        for idx, var in enumerate(var_order)]
+            new_vars, i = [], 1
+            for var in var_order:
+              while i in existing_z_idxs:
+                i += 1
+              new_vars.append(Variable("z%i" % i, type=var.type))
+              i += 1
+
             for var, new_var in zip(var_order, new_vars):
               new_functee = new_functee.replace(var, IndividualVariableExpression(new_var))
             # Functee is now fully abstract -- now include those bound variables.
             for new_var in new_vars[::-1]:
               new_functee = LambdaExpression(new_var, new_functee)
 
-            # Are there existing bound variables on the pattern `zx` which we
-            # should avoid shadowing within `subexpr`? If so, start counting
-            # above the maximal value.
-            existing_z_idxs = [INDVAR_TIGHT_RE.match(var.name) for var in bound_vars]
-            existing_z_idxs = [int(match.group(1)) for match in existing_z_idxs if match]
+            # TODO: probably more efficient way to do this than post-hoc checking .. !
+            if not self._valid_lambda_expr(new_functee, ()):
+              continue
+
+            # Within subexpr, let the functee be z<x>, where <x> is one larger
+            # than the highest-numbered bound variable.
             z_idx = max(existing_z_idxs) + 1 if existing_z_idxs else 1
 
             # Specify the function that, when applied to `new_functee`, will
