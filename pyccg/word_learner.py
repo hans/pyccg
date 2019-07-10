@@ -7,9 +7,11 @@ from pyccg import chart
 from pyccg.lexicon import predict_zero_shot, \
     get_candidate_categories, get_semantic_arity, \
     augment_lexicon_distant, augment_lexicon_cross_situational, augment_lexicon_2afc, \
+    augment_lexicon_unification, \
     build_bootstrap_likelihood
 from pyccg.perceptron import \
-    update_perceptron_distant, update_perceptron_cross_situational, update_perceptron_2afc
+    update_perceptron_distant, update_perceptron_cross_situational, update_perceptron_2afc, \
+    update_perceptron_supervised
 from pyccg.util import Distribution, NoParsesError
 
 
@@ -277,6 +279,55 @@ class WordLearner(object):
       L.info("Pruned %i entries from lexicon.", prune_count)
 
     return weighted_results
+
+  def update_with_supervision(self, sentence, model, lf):
+    """
+    Observe a new `sentence -> lf` pair in the context of some `model` and
+    update learner weights. (This is direct supervised learning.)
+
+    Args:
+      sentence: List of token strings
+      model: `Model` instance
+      lf: Ground-truth semantic parse of `sentence`
+
+    Returns:
+      weighted_results: List of weighted parse results for the example.
+    """
+    # TODO can this be merged with _update_with_example above? lexical
+    # induction is a bit different here.
+    try:
+      weighted_results, _ = update_perceptron_supervised(
+          self.lexicon, sentence, model, learning_rate=self.learning_rate, lf=lf)
+    except NoParsesError as e:
+      # No parse succeeded -- attempt lexical induction.
+      L.warning("Parse failed for sentence '%s'", " ".join(sentence))
+      L.warning(e)
+
+      self.lexicon = augment_lexicon_unification(self.lexicon, sentence, self.ontology, lf)
+      self.lexicon.debug_print()
+
+      # TODO: yikes, this is a hack
+      self.lexicon.prune(max_entries=3)
+
+      # Now attempt a new parameter update.
+      try:
+        weighted_results, _ = update_perceptron_supervised(
+            self.lexicon, sentence, model, learning_rate=self.learning_rate, lf=lf)
+      except NoParsesError:
+        return []
+
+    if self.prune_entries is not None:
+      # TODO
+      pass
+
+    return weighted_results
+    kwargs = {"lf": lf}
+    return self._update_with_example(
+        sentence, model,
+        augment_lexicon_fn=augment_lexicon_unification,
+        update_perceptron_fn=update_perceptron_supervised,
+        augment_lexicon_args=kwargs,
+        update_perceptron_args=kwargs)
 
   def update_with_distant(self, sentence, model, answer):
     """

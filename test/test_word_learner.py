@@ -181,7 +181,7 @@ def _make_complex_mock_ontology():
   return ontology
 
 
-def test_update_supervised():
+def test_update_with_supervision():
   """
   supervised learning update
   """
@@ -189,7 +189,9 @@ def test_update_supervised():
   lexicon = lex.Lexicon.fromstring(r"""
   :- N
 
-  and => N\N/N {\F G x.and_(F(x),G(x))}
+  or => N\N/N {\F G x.and_(F(x),G(x))}
+  blork => N {cube}
+  spork => N {cube}
   """, ontology=ontology, include_semantics=True)
 
   learner = WordLearner(lexicon)
