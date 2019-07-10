@@ -907,7 +907,7 @@ def augment_lexicon_unification(lex, sentence, ontology, lf):
 def build_bootstrap_likelihood(lex, sentence, ontology,
                                alpha=0.25, meaning_prior_smooth=1e-3):
   """
-  Prepare a likelihood function `p(meaning | syntax, sentence)` based on
+  Prepare a likelihood function `p(meaning, syntax | sentence)` based on
   syntactic bootstrapping.
 
   Args:
@@ -965,7 +965,7 @@ def likelihood_scene(tokens, categories, exprs, sentence_parse,
 
 def build_distant_likelihood(answer):
   """
-  Prepare a likelihood function `p(meaning | syntax, sentence)` based on
+  Prepare a likelihood function `p(meaning, syntax | sentence)` based on
   distant supervision.
 
   Args:
@@ -1047,18 +1047,19 @@ def likelihood_prominence(tokens, categories, exprs, sentence_parse,
 def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
                       model, likelihood_fns, queue_limit=5, max_expr_depth=6):
   """
-  Make zero-shot predictions of the posterior `p(syntax, meaning | sentence)`
+  Make zero-shot predictions of the posterior `p(meaning, syntax | sentence)`
   for each of `tokens`.
 
   Args:
     lex:
     tokens:
-    candidate_syntaxes:
+    candidate_syntaxes: `dict` mapping each token to a `Distribution` over
+      syntactic types
     sentence:
     ontology:
     model:
     likelihood_fns: Collection of likelihood functions
-      `p(meanings | syntaxes, sentence, model)` used to score candidate
+      `p(meaning, syntax | sentence, model)` used to score candidate
       meaning--syntax settings for a subset of `tokens`.  Each function should
       accept arguments `(tokens, candidate_categories, candidate_meanings,
       candidate_syntactic_parse, candidate_semantic_parse, model)`, where
@@ -1080,7 +1081,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       describing a nonzero-probability novel mapping of a subset `tokens` to
       syntactic categories `candidate_categories` and meanings
       `candidate_semantics`. The log-probability value given is
-      `p(meanings, syntaxes | sentence, model)`, under the relevant provided
+      `p(meaning, syntax | sentence, model)`, under the relevant provided
       meaning likelihoods and the lexicon's distribution over syntactic forms.
     dummy_vars: TODO
   """
@@ -1137,20 +1138,14 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
               sentence_semantics = sentence_semantics.replace(dummy_var, token_expr)
             sentence_semantics = sentence_semantics.simplify()
 
-            # Compute p(meaning | syntax, sentence, parse)
+            # TODO integrate p(meaning)
+
+            # Compute p(meaning, syntax | sentence, parse)
             logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
                                      result, sentence_semantics, model)
                       for likelihood_fn in likelihood_fns)
             likelihood += np.exp(logp)
-
-            # Add category priors.
-            # log_prior = sum(np.log(weight) for weight in syntax_weights)
-            log_prior = 0.
-            if log_prior == -np.inf or likelihood == 0:
-              # Zero probability. Skip.
-              continue
-
-            joint_score = log_prior + np.log(likelihood)
+            joint_score = np.log(likelihood)
 
             data = tuple_unordered([token_comb, syntax_comb, expr_comb])
             new_item = (joint_score, data)
@@ -1202,8 +1197,8 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
     ontology: Available logical ontology -- used to enumerate possible logical
       forms.
     model: Scene model which evaluates logical forms to answers.
-    likelihood_fns: Sequence of functions describing zero-shot likelihoods
-      `p(meanings | syntaxes, sentence, model)`. See `predict_zero_shot` for
+    likelihood_fns: Collection of functions describing zero-shot likelihoods
+      `p(meaning, syntax | sentence, model)`. See `predict_zero_shot` for
       more information.
     beta: Total mass to assign to novel candidate lexical entries per each
       wordform. (Mass will be divided according to the posterior distribution
