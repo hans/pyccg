@@ -431,6 +431,21 @@ def test_set_argument0():
   eq_(str(e), r"foo(d,b,c)")
 
 
+def test_normalize():
+  """
+  Expression normalization should collapse semantically irrelevant distinctions
+  between bound variable names.
+  """
+  # TODO verify inplace modification doesn't break things elsewhere
+  e1 = Expression.fromstring(r"\z1 z2.foo(z1,z2)")
+  e2 = Expression.fromstring(r"\z2 z1.foo(z2,z1)")
+  print(e1)
+  e1 = e1.normalize()
+  print(e2)
+  e2 = e2.normalize()
+  eq_(e1, e2)
+
+
 def test_unwrap_function():
   ontology = _make_mock_ontology()
 

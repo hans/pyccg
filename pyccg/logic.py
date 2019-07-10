@@ -1047,29 +1047,53 @@ class Expression(SubstituteBindingsI):
                                                          replace_bound, alpha_convert),
                                      self.__class__)
 
-    def normalize(self, ignore=None):
-        """Rename auto-generated unique variables"""
+    def normalize_inplace(self, ignore=None):
+        """Rename auto-generated unique variables in-place."""
         def get_indiv_vars(e):
             if isinstance(e, IndividualVariableExpression):
-                return set([e])
+                return [e]
             elif isinstance(e, AbstractVariableExpression):
-                return set()
+                return []
+            elif isinstance(e, VariableBinderExpression):
+                return [e] + list(e.visit(get_indiv_vars, itertools.chain.from_iterable))
             else:
                 return e.visit(get_indiv_vars,
-                               lambda parts: functools.reduce(operator.or_, parts, set()))
+                               itertools.chain.from_iterable)
 
+        indiv_vars = list(get_indiv_vars(self))
+        indiv_vars_dict = defaultdict(list)
+        for indiv_var in indiv_vars:
+          indiv_vars_dict[indiv_var.variable.name].append(indiv_var)
+
+        # Enumerate according to earliest appearance in linear form of
+        # expression (earliest first)
         result = self
-        for i,e in enumerate(sorted(get_indiv_vars(self), key=lambda e: e.variable)):
+        seen = set()
+        for i, e in enumerate(indiv_vars):
             if ignore is not None and e.variable.name in ignore:
                 continue
+            elif e.variable.name in seen:
+                continue
+
+            seen.add(e.variable.name)
             if isinstance(e,EventVariableExpression):
-                newVar = e.__class__(Variable('e0%s' % (i+1)))
-            elif isinstance(e,IndividualVariableExpression):
-                newVar = e.__class__(Variable('z%s' % (i+1)))
+                name = 'e0%i' % (i+1)
+            elif isinstance(e,(VariableBinderExpression, IndividualVariableExpression)):
+                # bound variables and auto-gen individual variables get z<x>
+                # names
+                name = 'z%i' % (i+1)
             else:
-                newVar = e
-            result = result.replace(e.variable, newVar, True)
+                continue
+
+            # Replace name in all relevant expressions.
+            for indiv_var in indiv_vars_dict[e.variable.name]:
+              indiv_var.variable.name = name
         return result
+
+    def normalize(self, ignore=None):
+        ret = deepcopy(self)
+        ret.normalize_inplace(ignore=ignore)
+        return ret
 
     def visit(self, function, combinator):
         """
