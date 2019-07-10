@@ -296,6 +296,28 @@ def test_set_yield():
     yield test_case, cat, update, expected
 
 
+def test_get_candidate_categories_full_sentence():
+  """
+  Basic category induction tests for the case where no word in a sentence is
+  known.
+  """
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+
+  gives => S\N/N/N {\o x y.give(x, y, o)}
+  John => N {\x.John(x)}
+  Mark => N {\x.Mark(x)}
+  it => N {\x.T}
+  """, include_semantics=True)
+  sentence = "Alice hands Mary that".split()
+  candidates = get_candidate_categories(lex, sentence, sentence)
+  for nominal in ["Alice", "Mary", "that"]:
+    argmax = str(candidates[nominal].argmax())
+    eq_(argmax, "N", "%s => %s" % (nominal, argmax))
+  verb_argmax = str(candidates["hands"].argmax())
+  eq_(verb_argmax, r"(((S\N)/N)/N)", "hands => %s" % verb_argmax)
+
+
 def test_attempt_candidate_parse():
   """
   Find parse candidates even when the parse requires composition.
