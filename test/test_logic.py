@@ -439,11 +439,18 @@ def test_normalize():
   # TODO verify inplace modification doesn't break things elsewhere
   e1 = Expression.fromstring(r"\z1 z2.foo(z1,z2)")
   e2 = Expression.fromstring(r"\z2 z1.foo(z2,z1)")
-  print(e1)
+  # e3 differs from e1, e2!
+  e3 = Expression.fromstring(r"\z1 z2.foo(z2,z1)")
+
   e1 = e1.normalize()
-  print(e2)
+  print(e1)
   e2 = e2.normalize()
+  print(e2)
+  e3 = e3.normalize()
+  print(e3)
   eq_(e1, e2)
+  ok_(e1 != e3, "%r == %r" % (e1, e3))
+  ok_(e2 != e3, "%r == %r" % (e2, e3))
 
 
 def test_unwrap_function():
