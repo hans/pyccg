@@ -296,8 +296,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     syntactic category.
     """
     # If possible, lean on the type system to help determine expression arity.
-    get_arity = (self.ontology and self.ontology.get_expr_arity) \
-        or get_semantic_arity
+    get_arity = (self.ontology and self.ontology.get_expr_arity) or l.get_arity
 
     entries_by_categ = {
       category: set(entry for entry in itertools.chain.from_iterable(self._entries.values())
@@ -715,8 +714,9 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
       semantic expressions for each of the tokens.
   """
 
-  get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
-      or get_semantic_arity
+  # Restrict semantic arities based on the observed arities available for each
+  # category. Pre-calculate the necessary associations.
+  category_sem_arities = lexicon.category_semantic_arities()
 
   lexicon = lexicon.clone()
   for token, syntax in zip(tokens, candidate_categories):
@@ -725,8 +725,13 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
     if lexicon.ontology is not None:
       # assign semantic arity based on syntactic arity
-      arity = get_category_arity(syntax)
-      var.type = lexicon.ontology.types[("?",) * (arity + 1)]
+      # implicitly asserts we have one semantic arity per syntactic category
+      try:
+        arity, = category_sem_arities[syntax]
+      except KeyError:
+        arity = get_semantic_arity(syntax)
+
+      var.type = lexicon.ontology.types[("*",) * arity + ("?",)]
       expr.typecheck()
 
     lexicon.set_entries(token, [(syntax, expr, 1.0)])
@@ -965,13 +970,6 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
       meaning likelihoods and the lexicon's distribution over syntactic forms.
     dummy_vars: TODO
   """
-
-  get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
-      or get_semantic_arity
-
-  # We will restrict semantic arities based on the observed arities available
-  # for each category. Pre-calculate the necessary associations.
-  category_sem_arities = lex.category_semantic_arities(soft_propagate_roots=True)
 
   # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.

@@ -457,7 +457,7 @@ def test_zero_shot_type_request():
   lex = Lexicon.fromstring(r"""
   :- S, N
   bar => N {baz}
-  blah => S/N {baz}
+  blah => S/N {bar}
   """, ontology=ontology, include_semantics=True)
 
   # setup: we observe a sentence "foo bar". ground truth semantics for 'foo' is
