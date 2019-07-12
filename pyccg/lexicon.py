@@ -296,8 +296,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     syntactic category.
     """
     # If possible, lean on the type system to help determine expression arity.
-    get_arity = (self.ontology and self.ontology.get_expr_arity) \
-        or get_semantic_arity
+    get_arity = (self.ontology and self.ontology.get_expr_arity) or l.get_arity
 
     entries_by_categ = {
       category: set(entry for entry in itertools.chain.from_iterable(self._entries.values())
@@ -580,6 +579,40 @@ def set_yield(category, new_yield):
     raise ValueError("unknown category type of instance %r" % category)
 
 
+def get_syntactic_parses(lex, tokens, sentence, smooth=1e-3):
+  """
+  Find the weighted syntactic parses for `sentence`, inducing novel
+  syntactic entries for each of `tokens`.
+  """
+  assert set(tokens).issubset(set(sentence))
+
+  # Make a minimal copy of `lex` which does not track semantics.
+  lex = lex.clone(retain_semantics=False)
+
+  # Remove entries for the queried tokens.
+  for token in tokens:
+    lex.set_entries(token, [])
+
+  category_prior = lex.observed_category_distribution(
+      exclude_tokens=set(tokens), soft_propagate_roots=True)
+  if smooth is not None:
+    for key in category_prior.keys():
+      category_prior[key] += smooth
+    category_prior = category_prior.normalize()
+  L.debug("Smoothed category prior with soft root propagation: %s", category_prior)
+
+  def get_parses(cat_assignment):
+    for token, category in zip(tokens, cat_assignment):
+      lex.set_entries(token, [(category, None, category_prior[category])])
+
+    return chart.WeightedCCGChartParser(lex, chart.DefaultRuleSet) \
+        .parse(sentence, return_aux=True)
+
+  for cat_assignment in itertools.product(category_prior.keys(), repeat=len(tokens)):
+    for parse, weight, _ in get_parses(cat_assignment):
+      yield (weight, cat_assignment, parse)
+
+
 def get_candidate_categories(lex, tokens, sentence, smooth=1e-3):
   """
   Find candidate categories for the given tokens which appear in `sentence` such
@@ -681,8 +714,9 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
       semantic expressions for each of the tokens.
   """
 
-  get_arity = (lexicon.ontology and lexicon.ontology.get_expr_arity) \
-      or get_semantic_arity
+  # Restrict semantic arities based on the observed arities available for each
+  # category. Pre-calculate the necessary associations.
+  category_sem_arities = lexicon.category_semantic_arities()
 
   lexicon = lexicon.clone()
   for token, syntax in zip(tokens, candidate_categories):
@@ -691,8 +725,13 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
     if lexicon.ontology is not None:
       # assign semantic arity based on syntactic arity
-      arity = get_category_arity(syntax)
-      var.type = lexicon.ontology.types[("?",) * (arity + 1)]
+      # implicitly asserts we have one semantic arity per syntactic category
+      try:
+        arity, = category_sem_arities[syntax]
+      except KeyError:
+        arity = get_semantic_arity(syntax)
+
+      var.type = lexicon.ontology.types[("*",) * arity + ("?",)]
       expr.typecheck()
 
     lexicon.set_entries(token, [(syntax, expr, 1.0)])
@@ -701,9 +740,9 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
   # First attempt a parse with only function application rules.
   results = chart.WeightedCCGChartParser(lexicon, ruleset=chart.ApplicationRuleSet) \
-      .parse(sentence)
+      .parse(sentence, return_aux=True)
 
-  for result in results:
+  for result, weight, _ in results:
     apparent_types = None
 
     if lexicon.ontology is not None:
@@ -724,7 +763,7 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
         apparent_types[token] = lexicon.ontology.infer_type(sem, var.name,
                                                             extra_types=extra_types)
 
-    yield result, apparent_types
+    yield weight, result, apparent_types
 
   # # Attempt to parse, allowing for function composition. In order to support
   # # this we need to pass a dummy expression which is a lambda.
@@ -752,6 +791,104 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
   # lexicon._entries[token] = []
   # return results, sub_target
+
+
+def augment_lexicon_unification(lex, sentence, ontology, lf):
+  """
+  Given a supervised `sentence -> lf` mapping, update the lexicon via a variant
+  of unification-GENLEX.
+  """
+  # compute possible syntactic parses, allowing all tokens in the sentence to
+  # belong to any category.
+  parses = get_syntactic_parses(lex, sentence, sentence)
+  _, _, best_parse = max(parses, key=lambda parse: parse[0])
+
+  token_categs = {}
+  for leaf_str, token in best_parse.pos():
+    # TODO doesn't handle edge case where `token` appears multiple times with
+    # different syntactic categories in the same sentence
+    token_categs[leaf_str] = token.categ()
+
+  # now attempt a (partial) semantic parse, allowing existing lexical entries
+  # to participate in the scoring process.
+  #
+  # we'll begin by just inducing semantic representations for *novel* words,
+  # and consider novel representations for existing tokens only if necessary.
+  novel_tokens = set(tok for tok in sentence if not lex.get_entries(tok))
+  known_tokens = set(sentence) - novel_tokens
+
+  induce_tokens_chain = itertools.chain(
+      [[]],
+      itertools.chain.from_iterable(itertools.combinations(known_tokens, n)
+                                    for n in range(len(known_tokens))))
+  ready_for_unification = False
+  for induction_set in induce_tokens_chain:
+    # we are going to run unification, attempting to infer all novel token
+    # meanings along with the meanings of the words in `induction_set`.
+    to_induce = list(novel_tokens) + list(induction_set)
+    candidate_categories = [token_categs[token] for token in to_induce]
+    dummy_vars = {token: l.Variable("F%03i" % i) for i, token in enumerate(to_induce)}
+
+    # fetch full candidate semantic parses, using dummy variables for all
+    # induction tokens
+    candidate_parses = attempt_candidate_parse(lex, to_induce, candidate_categories,
+                                               sentence, dummy_vars)
+    candidate_parses = list(candidate_parses)
+
+    if not candidate_parses:
+      # no valid parses for this induction set -- try the next one.
+      continue
+    else:
+      ready_for_unification = True
+      break
+
+  if not ready_for_unification:
+    # this may be because we greedily chose the best syntactic parse?
+    L.warning("no successful parse possible. quitting.")
+    return lex
+
+  L.debug("Running unification induction with tokens: %s", to_induce)
+
+  # Take the max-scoring candidate parse. This will serve as the "guide parse"
+  # -- all induced tokens must have semantic types which match the semantic
+  # types of their companion dummy variables in this semantic parse.
+  _, guiding_parse, apparent_types = max(candidate_parses, key=lambda p:p[0])
+
+  lex = lex.clone()
+  queue, new_entries = [(best_parse, lf)], set()
+  while queue:
+    node, expr = queue.pop()
+    token, parse_op = node.label()
+    if parse_op == "Leaf":
+      # Is this an induction token? If so, make sure its type matches what's
+      # expected under the guiding parse.
+      token_str = token._token
+      if token_str not in to_induce:
+        # Not an induction token. Skip.
+        continue
+
+      # print(token_str, expr.type, apparent_types[token_str])
+      if token_str in to_induce and not expr.type.resolve(apparent_types[token_str]):
+        continue
+
+      new_entries.add((token._token, token.categ(), expr))
+      continue
+
+    # get left and right children
+    left, right = list(node)
+
+    for left_split, right_split, cand_direction in ontology.iter_application_splits(expr):
+      if parse_op == ">" and cand_direction != "/" \
+          or parse_op == "<" and cand_direction != "\\":
+        continue
+
+      queue.append((left, left_split))
+      queue.append((right, right_split))
+
+  for token, categ, semantics in new_entries:
+    lex.add_entry(token, categ, semantics=semantics, weight=0.001)
+
+  return lex
 
 
 def build_bootstrap_likelihood(lex, sentence, ontology,
@@ -896,13 +1033,6 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
     dummy_vars: TODO
   """
 
-  get_arity = (lex.ontology and lex.ontology.get_expr_arity) \
-      or get_semantic_arity
-
-  # We will restrict semantic arities based on the observed arities available
-  # for each category. Pre-calculate the necessary associations.
-  category_sem_arities = lex.category_semantic_arities(soft_propagate_roots=True)
-
   # Shared dummy variables which is included in candidate semantic forms, to be
   # replaced by all candidate lexical expressions and evaluated.
   dummy_vars = {token: l.Variable("F%03i" % i) for i, token in enumerate(tokens)}
@@ -932,7 +1062,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
         results = list(results)
         category_parse_results[syntax_comb] = results
 
-        for result, apparent_types in results:
+        for _, result, apparent_types in results:
           L.debug("Searching for expressions with types: %s",
                   ";".join("%s: %s" % (token, apparent_types[token])
                            for token in token_comb))

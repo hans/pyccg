@@ -133,6 +133,16 @@ def update_perceptron(lexicon, sentence, model, success_fn,
   return weighted_results, norm
 
 
+def update_perceptron_supervised(lexicon, sentence, model, lf,
+                                 **update_perceptron_kwargs):
+  def success_fn(parse_result, model):
+    root_token, _ = parse_result.label()
+    return root_token.semantics().normalize() == lf.normalize(), 0.0
+
+  return update_perceptron(lexicon, sentence, model, success_fn,
+                           **update_perceptron_kwargs)
+
+
 def update_perceptron_distant(lexicon, sentence, model, answer,
                               **update_perceptron_kwargs):
   def success_fn(parse_result, model):

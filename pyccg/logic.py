@@ -319,12 +319,12 @@ class LogicParser(object):
         accum = self.make_VariableExpression(tok)
         if self.inRange(0) and self.token(0) == Tokens.OPEN:
             #The predicate has arguments
-            if not isinstance(accum, FunctionVariableExpression) and \
-               not isinstance(accum, ConstantExpression):
-                raise LogicalExpressionException(self._currentIndex,
-                                     "'%s' is an illegal predicate name.  "
-                                     "Individual variables may not be used as "
-                                     "predicates." % tok)
+            # if not isinstance(accum, FunctionVariableExpression) and \
+            #    not isinstance(accum, ConstantExpression):
+            #     raise LogicalExpressionException(self._currentIndex,
+            #                          "'%s' is an illegal predicate name.  "
+            #                          "Individual variables may not be used as "
+            #                          "predicates." % tok)
             self.token() #swallow the Open Paren
 
             #curry the arguments
@@ -677,7 +677,7 @@ class BasicType(Type):
   __hash__ = Type.__hash__
 
   def matches(self, other):
-    ret = other == ANY_BASIC_TYPE or other == ANY_TYPE or self == other \
+    ret = other is None or other == ANY_BASIC_TYPE or other == ANY_TYPE or self == other \
         or any(my_parent == other for my_parent in self.parents)
     return ret
 
@@ -727,7 +727,7 @@ class ComplexType(Type):
         self.second.matches(other.second)
 
   def resolve(self, other):
-    if other == ANY_TYPE:
+    if other is None or other == ANY_TYPE:
       return self
     elif isinstance(other, ComplexType):
       f = self.first.resolve(other.first)
@@ -1347,6 +1347,25 @@ class ApplicationExpression(Expression):
         """
         return self.uncurry()[1]
 
+    def set_argument(self, idx, expr):
+        """
+        Replace the argument at `idx` (in the uncurried form of this
+        application) with `expr`.
+
+        >>> Expression.fromstring("foo(a,b,c)").set_argument(2, Expression.fromstring("d"))
+        foo(a,b,d)
+        """
+        n_arguments = len(self.args)
+
+        application = self
+        for i in range(n_arguments - idx - 1):
+          if not isinstance(application, ApplicationExpression):
+            raise ValueError("provided `idx` %i is greater than the number of arguments provided to %s"
+                             % (idx, self))
+          application = application.function
+
+        application.argument = expr
+
     def is_atom(self):
         """
         Is this expression an atom (as opposed to a lambda expression applied
@@ -1480,8 +1499,8 @@ class EventVariableExpression(IndividualVariableExpression):
 class ConstantExpression(AbstractVariableExpression):
     """This class represents variables that do not take the form of a single
     character followed by zero or more digits."""
-    type = ENTITY_TYPE
 
+    def _get_type(self): return self.variable.type
     def _set_type(self, other_type=ANY_TYPE, signature=None):
         """:see Expression._set_type()"""
         assert isinstance(other_type, Type)
@@ -1491,9 +1510,7 @@ class ConstantExpression(AbstractVariableExpression):
 
         resolution = ANY_TYPE
         if other_type != ANY_TYPE:
-            resolution = other_type
-            if self.type != ENTITY_TYPE:
-                resolution = resolution.resolve(self.type)
+            resolution = other_type.resolve(self.type)
 
         for varEx in signature[self.variable.name]:
             # print("\t", varEx, varEx.type, resolution)
@@ -1502,9 +1519,11 @@ class ConstantExpression(AbstractVariableExpression):
             if not resolution:
                 raise InconsistentTypeHierarchyException(self)
 
-        signature[self.variable.name].append(self)
+        signature[self.variable.name].append(self.variable)
         for varEx in signature[self.variable.name]:
             varEx.type = resolution
+
+    type = property(_get_type, _set_type)
 
     def free(self):
         """:see: Expression.free()"""
@@ -1874,6 +1893,7 @@ class ExpectedMoreTokensException(LogicalExpressionException):
 
 
 INDVAR_RE = re.compile(r'^[a-df-z]\d*$')
+INDVAR_TIGHT_RE = re.compile(r'^z(\d+)$')
 FUNCVAR_RE = re.compile(r'^[A-Z]\d*$')
 EVENTVAR_RE = re.compile(r'^e\d*$')
 def is_indvar(expr):
@@ -2150,6 +2170,50 @@ def extract_lambda(expr):
     wrappings.append(wrapping.normalize())
 
   return wrappings
+
+
+def get_subexpressions(expr, track_parents=False):
+  """
+  Get all sub-expressions of a logical expression.
+
+  Args:
+    expr:
+    track_parents: If `True`, return a description of the parent of each
+      sub-expression within `expr`. This might be useful if a client wants to
+      replace the sub-expressions by modifying their parents.
+
+  Returns:
+    Set of tuples `(node, bound_vars)` (or `(node, parent, bound_vars)` if
+    `track_parents` is `True`), where each `node` is a subexpression of `expr`
+    and `bound_vars` is the collection of variables bound within `subexpr` but
+    declared above the scope of `subexpr` in `expr`.
+  """
+  subexprs = set()
+  def visit(node, parent, bound_vars=()):
+    if isinstance(node, IndividualVariableExpression) and node.variable in bound_vars:
+      return
+
+    subexprs.add((node, parent, bound_vars))
+
+    if isinstance(node, LambdaExpression):
+      bound_vars = bound_vars + (node.variable,)
+      visit(node.term, node, bound_vars)
+    elif isinstance(node, ApplicationExpression):
+      if isinstance(node.function, ConstantExpression):
+        # NB dropping bound variables in this recursive call.
+        # `parent` value here specifies that the application expression is
+        # the parent, and the child is in function position.
+        visit(node.function, (node, -1))
+
+      for i, arg in enumerate(node.args):
+        # use `parent` to record the position of each argument (makes
+        # replacement later much easier)
+        visit(arg, (node, i), bound_vars)
+
+  visit(expr, None)
+  if not track_parents:
+    subexprs = [(subexpr, bound_vars) for subexpr, _, bound_vars in subexprs]
+  return subexprs
 
 
 def get_arity(expr):
@@ -2487,10 +2551,12 @@ class Ontology(object):
           for arg in node.args:
             if isinstance(arg, ConstantExpression) and arg.variable.name in self.constants_dict:
               arg_types.append(self.constants_dict[arg.variable.name].type)
+            elif isinstance(arg, ConstantExpression) and arg.variable.name in self.functions_dict:
+              arg_types.append(self.functions_dict[arg.variable.name].type)
             else:
               arg_types.append(arg.type or ANY_TYPE)
 
-          apparent_types.add(self.types[tuple(arg_types) + ("e",)])
+          apparent_types.add(self.types[tuple(arg_types) + ("*",)])
 
         try:
           function_type = self.functions_dict[fn_name].type
@@ -2811,6 +2877,129 @@ class Ontology(object):
         expr.function = self.unwrap_base_functions(expr.function)
 
     return expr
+
+  def iter_application_splits(self, expr):
+    """
+    Iterate over all splits of the given `expr` which could yield `expr` by
+    function application.
+    """
+    # TODO: should probably expect inputs to be typechecked
+    self.typecheck(expr)
+
+    for subexpr, parent, ctx_bound_vars in get_subexpressions(expr, track_parents=True):
+      # Extract existing bound variables + some subset of predicates used in
+      # the subexpression.
+      free_vars = subexpr.predicates()
+      min_free_vars = 1 if not ctx_bound_vars else 0
+      for num_free_vars in range(min_free_vars, len(free_vars) + 1):
+        for free_var_set in itertools.combinations(free_vars, num_free_vars):
+          all_vars = ctx_bound_vars + free_var_set
+          for var_order in itertools.permutations(all_vars):
+            # Make the logical expression that will be pulled out by adding
+            # arguments for each of all_vars.
+            new_functee = subexpr
+
+            # Are there existing bound variables on the pattern `zx` which we
+            # should avoid shadowing within our rewrite of `subexpr`?
+            #
+            # We don't want to shadow (1) variables bound in the context
+            # containing `subexpr` (i.e. `ctx_bound_vars`), or variables bound
+            # within `subexpr`.
+            existing_z_idxs = [INDVAR_TIGHT_RE.match(var.name)
+                               for var in ctx_bound_vars + tuple(subexpr.bound())]
+            existing_z_idxs = set(int(match.group(1)) for match in existing_z_idxs if match)
+
+            # Create bound variables for each of the variables in our set.
+            new_vars, i = [], 1
+            for var in var_order:
+              while i in existing_z_idxs:
+                i += 1
+              new_vars.append(Variable("z%i" % i, type=var.type))
+              i += 1
+
+            for var, new_var in zip(var_order, new_vars):
+              new_functee = new_functee.replace(var, IndividualVariableExpression(new_var))
+            # Functee is now fully abstract -- now include those bound variables.
+            for new_var in new_vars[::-1]:
+              new_functee = LambdaExpression(new_var, new_functee)
+
+            # TODO: probably more efficient way to do this than post-hoc checking .. !
+            if not self._valid_lambda_expr(new_functee, ()):
+              continue
+
+            # Within subexpr, let the functee be z<x>, where <x> is one larger
+            # than the highest-numbered bound variable.
+            z_idx = max(existing_z_idxs) + 1 if existing_z_idxs else 1
+
+            # Specify the function that, when applied to `new_functee`, will
+            # recreate `subexpr`.
+            new_variable_type = self.types[tuple(var.type for var in var_order) + subexpr.type.flat]
+            new_variable = Variable("z%i" % z_idx, type=new_variable_type)
+
+            # Now specify the replacement expression, which is the application of
+            # `var_order` to `new_variable`.
+            wrapped_variable = IndividualVariableExpression(new_variable)
+            wrapped_args = [ConstantExpression(v) if v.name in self.functions_dict
+                            else IndividualVariableExpression(v)
+                            for v in var_order]
+            replacement_expression = make_application(wrapped_variable, wrapped_args)
+
+            # Create the new functor representation, which will become the
+            # semantics of one of the split elements. Replaces `subexpr` with
+            # `replacement_expression` in the original `expr`.
+            #
+            # Replace in-place `subexpr` under its immediate parent, deepcopy the
+            # result, and swap back the old thing.
+
+            # TODO there should be some better Pythonic way to do this..
+            if parent is None:
+              # we are at the parent subexpr -- no replacement necessary
+              functor = replacement_expression
+
+              # special case: avoid yielding silly pairs like
+              #
+              #     (\z1.z1(foo), \z1.unique(\a.and_(z1(a),sphere(a))))
+              #
+              # which are equivalent under application to
+              #
+              #     (\z1.unique(\a.and_(z1(a),sphere(a))), foo)
+              #
+              # so just yield the simpler pair!
+              if len(new_vars) == 1:
+                functor = functor.argument
+
+                yield new_functee, functor, "/"
+                yield functor, new_functee, "\\"
+
+                continue
+
+              functor = deepcopy(functor)
+            elif isinstance(parent, tuple) and isinstance(parent[0], ApplicationExpression):
+              node, idx = parent
+              if idx == -1:
+                # replacing at predicate site
+                old_function = node.function
+                node.function = replacement_expression
+                functor = deepcopy(expr)
+                node.function = old_function
+              else:
+                # replacing at one of the arguments
+                old_arg = node.args[idx]
+                node.set_argument(idx, replacement_expression)
+                functor = deepcopy(expr)
+                node.set_argument(idx, old_arg)
+            elif isinstance(parent, LambdaExpression):
+              old_term = parent.term
+              parent.term = replacement_expression
+              functor = deepcopy(expr)
+              parent.term = old_term
+            else:
+              raise ValueError("unknown parent type %s: %s" % (type(parent), parent))
+
+            functor = LambdaExpression(new_variable, functor)
+
+            yield functor, new_functee, "/"
+            yield new_functee, functor, "\\"
 
 
 def compute_type_raised_semantics(semantics):

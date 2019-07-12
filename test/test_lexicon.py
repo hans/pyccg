@@ -296,6 +296,28 @@ def test_set_yield():
     yield test_case, cat, update, expected
 
 
+def test_get_candidate_categories_full_sentence():
+  """
+  Basic category induction tests for the case where no word in a sentence is
+  known.
+  """
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+
+  gives => S\N/N/N {\o x y.give(x, y, o)}
+  John => N {\x.John(x)}
+  Mark => N {\x.Mark(x)}
+  it => N {\x.T}
+  """, include_semantics=True)
+  sentence = "Alice hands Mary that".split()
+  candidates = get_candidate_categories(lex, sentence, sentence)
+  for nominal in ["Alice", "Mary", "that"]:
+    argmax = str(candidates[nominal].argmax())
+    eq_(argmax, "N", "%s => %s" % (nominal, argmax))
+  verb_argmax = str(candidates["hands"].argmax())
+  eq_(verb_argmax, r"(((S\N)/N)/N)", "hands => %s" % verb_argmax)
+
+
 def test_attempt_candidate_parse():
   """
   Find parse candidates even when the parse requires composition.
@@ -338,6 +360,72 @@ def _make_simple_mock_ontology():
 
   ontology = l.Ontology(types, functions, constants, variable_weight=0.1)
   return ontology
+
+
+def test_augment_lexicon_unification():
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S
+
+  and => S\S/S {\f g x.and_(f(x),g(x))}
+  blue => S {foo}
+  black => S {bar}
+  """, ontology=ontology, include_semantics=True)
+
+  # NB in this case, all words are novel words.
+  sentence = "red AND white".split()
+  lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  ontology.typecheck(lf)
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["red", "AND", "white"]}
+  ok_("foo" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_("bar" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_(r"\z2 z1 x.and_(z1(x),z2(x))" in exprs["AND"])
+
+  print("%i entries induced for 'red'" % len(new_lex.get_entries("red")))
+
+  old_results = WeightedCCGChartParser(lex).parse(sentence)
+  new_results = WeightedCCGChartParser(new_lex).parse(sentence)
+  eq_(len(old_results), 0, "Parse should fail before augmenting")
+  ok_(len(new_results) > 0, "Parse should succeed after augmenting")
+
+
+def test_augment_lexicon_unification_partial():
+  """
+  existing knowledge in the lexicon should greatly constrain
+  `augment_lexicon_unification`
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- N
+
+  # NB need another N\N/N entry, otherwise there are no examples of N\N/N and
+  # the category prior will be borked.
+  or => N\N/N {\f g x.and_(f(x),g(x))}
+
+  and => N\N/N {\f g x.and_(f(x),g(x))}
+  blue => N {foo}
+  black => N {bar}
+  """, ontology=ontology, include_semantics=True)
+
+  # NB in this case, one of the words ("and") is known!
+  sentence = "red and white".split()
+  lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  ontology.typecheck(lf)
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  eq_(set(new_lex.get_entries("and")), set(lex.get_entries("and")),
+      "no update for token 'and' should be necessary")
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["red", "white"]}
+  ok_("foo" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_("bar" in exprs["red"])
+  ok_("foo" in exprs["white"])
 
 
 def test_fromstring_typechecks():
@@ -404,7 +492,7 @@ def test_zero_shot_type_request():
   lex = Lexicon.fromstring(r"""
   :- S, N
   bar => N {baz}
-  blah => S/N {baz}
+  blah => S/N {bar}
   """, ontology=ontology, include_semantics=True)
 
   # setup: we observe a sentence "foo bar". ground truth semantics for 'foo' is
@@ -423,7 +511,7 @@ def test_zero_shot_type_request():
 
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
-  eq_(kwargs["type_request"], ontology.types["boolean", "e"])
+  eq_(kwargs["type_request"], ontology.types["boolean", "*"])
 
 
 def test_zero_shot_type_request_2arg():
@@ -455,4 +543,4 @@ def test_zero_shot_type_request_2arg():
 
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
-  eq_(kwargs["type_request"], ontology.types["obj", "obj", "e"])
+  eq_(kwargs["type_request"], ontology.types["obj", "obj", "*"])

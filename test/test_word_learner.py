@@ -147,3 +147,57 @@ def test_update_distant_two_novel_words():
     entries = learner.lexicon._entries[token]
     eq_(set([(str(e.categ()), str(e.semantics())) for e in entries]),
         expected)
+
+
+def _make_complex_mock_ontology():
+  def fn_unique(xs):
+    true_xs = [x for x, matches in xs.items() if matches]
+    assert len(true_xs) == 1
+    return true_xs[0]
+
+  types = log.TypeSystem(["obj", "num", "ax", "boolean"])
+
+  functions = [
+    types.new_function("cmp_pos", ("ax", "obj", "obj", "num"),
+                       lambda ax, a, b: a["3d_coords"][ax()] - b["3d_coords"][ax()]),
+    types.new_function("ltzero", ("num", "boolean"), lambda x: x < 0),
+
+    types.new_function("ax_x", ("ax",), lambda: 0),
+    types.new_function("ax_y", ("ax",), lambda: 1),
+    types.new_function("ax_z", ("ax",), lambda: 2),
+
+    types.new_function("unique", (("obj", "boolean"), "obj"), fn_unique),
+
+    types.new_function("cube", ("obj", "boolean"), lambda x: x["shape"] == "cube"),
+    types.new_function("sphere", ("obj", "boolean"), lambda x: x["shape"] == "sphere"),
+
+    types.new_function("and_", ("boolean", "boolean", "boolean"), lambda x, y: x and y),
+  ]
+
+  constants = [types.new_constant("one", "num"), types.new_constant("two", "num")]
+
+  ontology = log.Ontology(types, functions, constants, variable_weight=0.1)
+
+  return ontology
+
+
+def test_update_with_supervision():
+  """
+  supervised learning update
+  """
+  ontology = _make_complex_mock_ontology()
+  lexicon = lex.Lexicon.fromstring(r"""
+  :- N
+
+  or => N\N/N {\F G x.and_(F(x),G(x))}
+  blork => N {cube}
+  spork => N {cube}
+  """, ontology=ontology, include_semantics=True)
+
+  learner = WordLearner(lexicon)
+
+  sentence = "cubic and spherical".split()
+  model = _make_mock_model(learner)
+  answer = log.Expression.fromstring(r"\x.and_(cube(x),sphere(x))")
+
+  learner.update_with_supervision(sentence, learner, answer)

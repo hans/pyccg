@@ -172,7 +172,7 @@ class UndirectedFunctionApplication(UndirectedBinaryCombinator):
     fsem, asem = function.semantics(), argument.semantics()
     if fsem is not None and asem is not None:
       # if function's type is not set, do the best we can to infer.
-      if self._ontology is not None \
+      if fsem.type is None and self._ontology is not None \
           and isinstance(fsem, l.IndividualVariableExpression):
         fsem.variable.type = self._ontology.types[asem.type.flat + fsem.variable.type.flat[1:]]
 

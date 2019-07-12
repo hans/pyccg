@@ -356,7 +356,8 @@ def test_infer_type():
     (r"\a b.ltzero(cmp_pos(ax_x,a,b))", "a", ontology.types["obj"]),
     (r"\a b.ltzero(cmp_pos(ax_x,a,b))", "b", ontology.types["obj"]),
     (r"\A b.and_(ltzero(b),A(b))", "A", ontology.types[ontology.types.ANY_TYPE, "boolean"]),
-    (r"F00(one)", "F00", ontology.types["num", "e"]),
+    (r"F00(one)", "F00", ontology.types["num", "*"]),
+    (r"\F.unique(F(and_))", "F", ontology.types[("boolean", "boolean", "boolean"), ("obj", "boolean")]),
   ]
 
   for expr, query_variable, expected_type in cases:
@@ -386,6 +387,18 @@ def test_expression_bound():
       {"x", "y"})
 
 
+def test_set_argument():
+  e = Expression.fromstring(r"foo(a,b,c)")
+  e.set_argument(2, Expression.fromstring("d"))
+  eq_(str(e), r"foo(a,b,d)")
+
+
+def test_set_argument0():
+  e = Expression.fromstring(r"foo(a,b,c)")
+  e.set_argument(0, Expression.fromstring("d"))
+  eq_(str(e), r"foo(d,b,c)")
+
+
 def test_unwrap_function():
   ontology = _make_mock_ontology()
 
@@ -399,3 +412,163 @@ def test_unwrap_base_functions():
       r"unique(\z1.sphere(z1))")
   eq_(str(ontology.unwrap_base_functions(Expression.fromstring(r"cmp_pos(ax_x,unique(sphere),unique(cube))"))),
       r"cmp_pos(ax_x,unique(\z1.sphere(z1)),unique(\z1.cube(z1)))")
+
+
+def test_get_subexpressions():
+  ontology = _make_mock_ontology()
+
+  cases = [
+    (r"unique(\a.and_(cube(a),sphere(a)))",
+     {},
+     {
+       # weird bug -- predicate gets replaced
+       r"and_(cube(a),cube(a))"
+     }),
+  ]
+
+  def do_test(expr, assert_in, assert_not_in):
+    expr = Expression.fromstring(expr)
+    subexprs = [str(e) for e, _ in get_subexpressions(expr)]
+
+    for e in assert_in:
+      ok_(e in subexprs, e)
+    for e in assert_not_in:
+      ok_(e not in subexprs, e)
+
+  for expr, assert_in, assert_not_in in cases:
+    yield do_test, expr, assert_in, assert_not_in
+
+
+def test_iter_application_splits():
+  # TODO test that, for every split, application on split parts yields a
+  # subexpression
+  ontology = _make_mock_ontology()
+  cases = [
+    (r"unique(\a.and_(cube(a),sphere(a)))",
+      {(r"\z1.unique(\a.z1(cube,sphere,a))", r"\z1 z2 z3.and_(z1(z3),z2(z3))", "/"),},
+      {
+        # should not yield exprs which don't use their bound variables
+        (r"\z1.unique(\a.and_(cube(a),sphere(a)))", None, None),
+      }),
+
+    (r"\z1.unique(z1(and_))",
+      {},
+      {
+        # should not shadow existing bound variables
+        (r"\z1 z1.z1(z1)", None, None),
+      }),
+  ]
+
+  def do_test(expression, expected_members, expected_non_members):
+    expr = Expression.fromstring(expression)
+    split_tuples = []
+    # iterating with for-loop so that we can catch incremental yields -- easier
+    # to debug
+    for part1, part2, dir in ontology.iter_application_splits(expr):
+      # print("\t\t",part1, "\t", part2, "\t", dir)
+      split_tuples.append((str(part1), str(part2), dir))
+    # from pprint import pprint
+    # pprint(split_tuples)
+
+    all_parts = set(part1 for part1, _, _ in split_tuples) | set(part2 for _, part2, _ in split_tuples)
+
+    for el in expected_members:
+      if el[1] is None:
+        # just want to assert that a logical expr appears *somewhere*
+        ok_(el[0] in all_parts, el[0])
+      else:
+        # full split specified
+        ok_(el in split_tuples, el)
+    for el in expected_non_members:
+      if el[1] is None:
+        # just want to assert that a logical expr appears *nowhere*
+        ok_(el[0] not in all_parts, el[0])
+      else:
+        # full split specified
+        ok_(el not in split_tuples, el)
+
+  for expr, expected, expected_not in cases:
+    yield do_test, expr, expected, expected_not
+
+
+def test_iter_application_splits_complete():
+  """
+  Evaluate completeness of `iter_application_splits` (not an exhaustive test).
+  """
+  ontology = _make_mock_ontology()
+  cases = [
+    (r"\x.and_(foo(x),bar(x))",
+     {
+       (r"\z1 x.z1(x,foo)", r"\z1 z2.and_(z2(z1),bar(z1))", "/"),
+       (r"\z1 x.and_(z1(x),bar(x))", r"foo", "/"),
+     },
+    )
+  ]
+
+  def do_test(expr, assert_in):
+    expr = Expression.fromstring(expr)
+    splits = []
+    for left, right, dir in ontology.iter_application_splits(expr):
+      splits.append((str(left), str(right), dir))
+      print("\t", left, right, dir)
+    # splits = list(ontology.iter_application_splits(expr))
+    # splits = [(str(left), str(right), dir) for left, right, dir in splits]
+    # from pprint import pprint
+    # pprint(splits)
+
+    for el in assert_in:
+      ok_(el in splits, "%s not in splits" % (el,))
+
+  for expr, assert_in in cases:
+    yield do_test, expr, assert_in
+
+
+def _test_application_split_sound(expr, ontology):
+  """
+  Evaluate soundness of `iter_application_splits` for a particular expression.
+  """
+  if isinstance(expr, str):
+    expr = Expression.fromstring(expr)
+  subexprs = [str(x) for x, _ in get_subexpressions(expr)]
+
+  for part1, part2, dir in ontology.iter_application_splits(expr):
+    arg1, arg2 = (part1, part2) if dir == "/" else (part2, part1)
+    reapplied = str(ApplicationExpression(arg1, arg2).simplify())
+    ok_(reapplied in subexprs, "%s %s %s --> %s" % (part1, dir, part2, reapplied))
+
+
+def test_iter_application_splits_sound():
+  """
+  Every proposed split should, after application, yield a subexpression of the
+  original expression.
+  """
+
+  ontology = _make_mock_ontology()
+  cases = [
+    r"unique(\a.and_(cube(a),sphere(a)))",
+  ]
+
+  for expr in cases:
+    yield _test_application_split_sound, expr, ontology
+
+
+def test_iter_application_splits_sound_repeated():
+  """
+  Verify that `iter_application_splits` is sound over repeated calls.
+  (the closure of an expression under `iter_application_splits` should still be
+  sound)
+  """
+  ontology = _make_mock_ontology()
+
+  expr = r"unique(\a.and_(cube(a),sphere(a)))"
+  expr = Expression.fromstring(expr)
+  all_splits = {(expr, expr, None)}
+  for _ in range(2):
+    new_all_splits = set()
+    for left, right, _ in all_splits:
+      for node in [left, right]:
+        yield _test_application_split_sound, node, ontology
+
+        new_all_splits |= set(ontology.iter_application_splits(node))
+
+    all_splits = new_all_splits
