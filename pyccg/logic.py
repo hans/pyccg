@@ -2953,10 +2953,27 @@ class Ontology(object):
 
             # TODO there should be some better Pythonic way to do this..
             if parent is None:
-              # DEV make this work.
-              continue
-              # subexpr == expr
-              functor = LambdaExpression(new_variable, replacement_expression)
+              # we are at the parent subexpr -- no replacement necessary
+              functor = replacement_expression
+
+              # special case: avoid yielding silly pairs like
+              #
+              #     (\z1.z1(foo), \z1.unique(\a.and_(z1(a),sphere(a))))
+              #
+              # which are equivalent under application to
+              #
+              #     (\z1.unique(\a.and_(z1(a),sphere(a))), foo)
+              #
+              # so just yield the simpler pair!
+              if len(new_vars) == 1:
+                functor = functor.argument
+
+                yield new_functee, functor, "/"
+                yield functor, new_functee, "\\"
+
+                continue
+
+              functor = deepcopy(functor)
             elif isinstance(parent, tuple) and isinstance(parent[0], ApplicationExpression):
               node, idx = parent
               if idx == -1:
@@ -2978,6 +2995,7 @@ class Ontology(object):
               parent.term = old_term
             else:
               raise ValueError("unknown parent type %s: %s" % (type(parent), parent))
+
             functor = LambdaExpression(new_variable, functor)
 
             yield functor, new_functee, "/"

@@ -491,6 +491,38 @@ def test_iter_application_splits():
     yield do_test, expr, expected, expected_not
 
 
+def test_iter_application_splits_complete():
+  """
+  Evaluate completeness of `iter_application_splits` (not an exhaustive test).
+  """
+  ontology = _make_mock_ontology()
+  cases = [
+    (r"\x.and_(foo(x),bar(x))",
+     {
+       (r"\z1 x.z1(x,foo)", r"\z1 z2.and_(z2(z1),bar(z1))", "/"),
+       (r"\z1 x.and_(z1(x),bar(x))", r"foo", "/"),
+     },
+    )
+  ]
+
+  def do_test(expr, assert_in):
+    expr = Expression.fromstring(expr)
+    splits = []
+    for left, right, dir in ontology.iter_application_splits(expr):
+      splits.append((str(left), str(right), dir))
+      print("\t", left, right, dir)
+    # splits = list(ontology.iter_application_splits(expr))
+    # splits = [(str(left), str(right), dir) for left, right, dir in splits]
+    # from pprint import pprint
+    # pprint(splits)
+
+    for el in assert_in:
+      ok_(el in splits, "%s not in splits" % (el,))
+
+  for expr, assert_in in cases:
+    yield do_test, expr, assert_in
+
+
 def _test_application_split_sound(expr, ontology):
   """
   Evaluate soundness of `iter_application_splits` for a particular expression.
