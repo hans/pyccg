@@ -376,7 +376,16 @@ def test_augment_lexicon_unification():
   lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
   ontology.typecheck(lf)
   new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
-  new_lex.prune()
+
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["red", "AND", "white"]}
+  ok_("foo" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_("bar" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_(r"\z2 z1 x.and_(z1(x),z2(x))" in exprs["AND"])
+
+  new_lex.prune(2)
 
   old_results = WeightedCCGChartParser(lex).parse(sentence)
   new_results = WeightedCCGChartParser(new_lex).parse(sentence)
