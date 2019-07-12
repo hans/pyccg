@@ -372,6 +372,7 @@ def test_augment_lexicon_unification():
   black => S {bar}
   """, ontology=ontology, include_semantics=True)
 
+  # NB in this case, all words are novel words.
   sentence = "red AND white".split()
   lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
   ontology.typecheck(lf)
@@ -385,12 +386,46 @@ def test_augment_lexicon_unification():
   ok_("foo" in exprs["white"])
   ok_(r"\z2 z1 x.and_(z1(x),z2(x))" in exprs["AND"])
 
-  new_lex.prune(2)
+  print("%i entries induced for 'red'" % len(new_lex.get_entries("red")))
 
   old_results = WeightedCCGChartParser(lex).parse(sentence)
   new_results = WeightedCCGChartParser(new_lex).parse(sentence)
   eq_(len(old_results), 0, "Parse should fail before augmenting")
   ok_(len(new_results) > 0, "Parse should succeed after augmenting")
+
+
+def test_augment_lexicon_unification_partial():
+  """
+  existing knowledge in the lexicon should greatly constrain
+  `augment_lexicon_unification`
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- N
+
+  # NB need another N\N/N entry, otherwise there are no examples of N\N/N and
+  # the category prior will be borked.
+  or => N\N/N {\f g x.and_(f(x),g(x))}
+
+  and => N\N/N {\f g x.and_(f(x),g(x))}
+  blue => N {foo}
+  black => N {bar}
+  """, ontology=ontology, include_semantics=True)
+
+  # NB in this case, one of the words ("and") is known!
+  sentence = "red and white".split()
+  lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  ontology.typecheck(lf)
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  eq_(set(new_lex.get_entries("and")), set(lex.get_entries("and")),
+      "no update for token 'and' should be necessary")
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["red", "white"]}
+  ok_("foo" in exprs["red"])
+  ok_("foo" in exprs["white"])
+  ok_("bar" in exprs["red"])
+  ok_("foo" in exprs["white"])
 
 
 def test_fromstring_typechecks():

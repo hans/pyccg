@@ -740,9 +740,9 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
 
   # First attempt a parse with only function application rules.
   results = chart.WeightedCCGChartParser(lexicon, ruleset=chart.ApplicationRuleSet) \
-      .parse(sentence)
+      .parse(sentence, return_aux=True)
 
-  for result in results:
+  for result, weight, _ in results:
     apparent_types = None
 
     if lexicon.ontology is not None:
@@ -763,7 +763,7 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
         apparent_types[token] = lexicon.ontology.infer_type(sem, var.name,
                                                             extra_types=extra_types)
 
-    yield result, apparent_types
+    yield weight, result, apparent_types
 
   # # Attempt to parse, allowing for function composition. In order to support
   # # this we need to pass a dummy expression which is a lambda.
@@ -803,12 +803,74 @@ def augment_lexicon_unification(lex, sentence, ontology, lf):
   parses = get_syntactic_parses(lex, sentence, sentence)
   _, _, best_parse = max(parses, key=lambda parse: parse[0])
 
+  token_categs = {}
+  for leaf_str, token in best_parse.pos():
+    # TODO doesn't handle edge case where `token` appears multiple times with
+    # different syntactic categories in the same sentence
+    token_categs[leaf_str] = token.categ()
+
+  # now attempt a (partial) semantic parse, allowing existing lexical entries
+  # to participate in the scoring process.
+  #
+  # we'll begin by just inducing semantic representations for *novel* words,
+  # and consider novel representations for existing tokens only if necessary.
+  novel_tokens = set(tok for tok in sentence if not lex.get_entries(tok))
+  known_tokens = set(sentence) - novel_tokens
+
+  induce_tokens_chain = itertools.chain(
+      [[]],
+      itertools.chain.from_iterable(itertools.combinations(known_tokens, n)
+                                    for n in range(len(known_tokens))))
+  ready_for_unification = False
+  for induction_set in induce_tokens_chain:
+    # we are going to run unification, attempting to infer all novel token
+    # meanings along with the meanings of the words in `induction_set`.
+    to_induce = list(novel_tokens) + list(induction_set)
+    candidate_categories = [token_categs[token] for token in to_induce]
+    dummy_vars = {token: l.Variable("F%03i" % i) for i, token in enumerate(to_induce)}
+
+    # fetch full candidate semantic parses, using dummy variables for all
+    # induction tokens
+    candidate_parses = attempt_candidate_parse(lex, to_induce, candidate_categories,
+                                               sentence, dummy_vars)
+    candidate_parses = list(candidate_parses)
+
+    if not candidate_parses:
+      # no valid parses for this induction set -- try the next one.
+      continue
+    else:
+      ready_for_unification = True
+      break
+
+  if not ready_for_unification:
+    # this may be because we greedily chose the best syntactic parse?
+    L.warning("no successful parse possible. quitting.")
+    return lex
+
+  L.debug("Running unification induction with tokens: %s", to_induce)
+
+  # Take the max-scoring candidate parse. This will serve as the "guide parse"
+  # -- all induced tokens must have semantic types which match the semantic
+  # types of their companion dummy variables in this semantic parse.
+  _, guiding_parse, apparent_types = max(candidate_parses, key=lambda p:p[0])
+
   lex = lex.clone()
   queue, new_entries = [(best_parse, lf)], set()
   while queue:
     node, expr = queue.pop()
     token, parse_op = node.label()
     if parse_op == "Leaf":
+      # Is this an induction token? If so, make sure its type matches what's
+      # expected under the guiding parse.
+      token_str = token._token
+      if token_str not in to_induce:
+        # Not an induction token. Skip.
+        continue
+
+      # print(token_str, expr.type, apparent_types[token_str])
+      if token_str in to_induce and not expr.type.resolve(apparent_types[token_str]):
+        continue
+
       new_entries.add((token._token, token.categ(), expr))
       continue
 
@@ -1000,7 +1062,7 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
         results = list(results)
         category_parse_results[syntax_comb] = results
 
-        for result, apparent_types in results:
+        for _, result, apparent_types in results:
           L.debug("Searching for expressions with types: %s",
                   ";".join("%s: %s" % (token, apparent_types[token])
                            for token in token_comb))
