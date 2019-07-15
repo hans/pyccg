@@ -322,13 +322,16 @@ test_2afc_examples = [
 
   (("the girl fears the toy",
     Scene([Sarah, Toy], [BeAbout(Sarah, "fear", Toy)],
-          name="scene1"),
-    Scene([Sarah, Toy], [Cause(Toy, Become(Sarah, "fear"))])),
+          name="be_about"),
+    Scene([Sarah, Toy], [Cause(Toy, Become(Sarah, "fear"))],
+          name="cause")),
    0),
 
   (("the toy frightens the girl",
-    Scene([Sarah, Toy], [Cause(Toy, Become(Sarah, "fear"))]),
-    Scene([Sarah, Toy], [BeAbout(Sarah, "fear", Toy)])),
+    Scene([Sarah, Toy], [Cause(Toy, Become(Sarah, "fear"))],
+          name="cause"),
+    Scene([Sarah, Toy], [BeAbout(Sarah, "fear", Toy)],
+          name="be_about")),
    0),
 
 ]
