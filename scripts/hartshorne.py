@@ -250,7 +250,6 @@ initial_lexicon = Lexicon.fromstring(r"""
   the => N/N {\x.unique(x)} <1.1>
   girl => N {\x.female(x)} <0.6>
   toy => N {\x.toy(x)} <0.8>
-  toy => N {\x.toy(x)} <0.3>
   doesn't => (S\N)/(S\N) {\a.not(a)} <0.5>
 """, ontology, include_semantics=True)
 
