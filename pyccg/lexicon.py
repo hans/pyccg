@@ -1144,8 +1144,11 @@ def predict_zero_shot(lex, tokens, candidate_syntaxes, sentence, ontology,
             logp = sum(likelihood_fn(token_comb, syntax_comb, expr_comb,
                                      result, sentence_semantics, model)
                       for likelihood_fn in likelihood_fns)
-            likelihood += np.exp(logp)
-            joint_score = np.log(likelihood)
+            joint_score = logp
+
+            if logp == -np.inf:
+              # Zero probability. Skip.
+              continue
 
             data = tuple_unordered([token_comb, syntax_comb, expr_comb])
             new_item = (joint_score, data)
@@ -1232,9 +1235,6 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
       meaning_masses[meaning] += weight
     candidates = {(syntax, meaning): weight / meaning_masses[meaning]
                   for (syntax, meaning), weight in candidates.items()}
-    from pprint import pprint
-    print()
-    pprint(meaning_masses)
 
     total_mass = sum(candidates.values())
     if len(candidates) > 0:
