@@ -403,6 +403,22 @@ def test_insert_argument():
     yield do_test, lf, idx, expr, expected
 
 
+def test_remove_argument():
+  cases = [
+      (r"foo(a,b,c)", 0, "foo(b,c)"),
+      (r"foo(a,b,c)", 1, "foo(a,c)"),
+      (r"foo(a,b,c)", 2, "foo(a,b)"),
+  ]
+
+  def do_test(lf, idx, expected):
+    e = Expression.fromstring(lf)
+    e = e.remove_argument(idx)
+    eq_(str(e), expected)
+
+  for lf, idx, expected in cases:
+    yield do_test, lf, idx, expected
+
+
 def test_set_argument():
   e = Expression.fromstring(r"foo(a,b,c)")
   e.set_argument(2, Expression.fromstring("d"))

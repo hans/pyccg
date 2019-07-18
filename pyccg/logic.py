@@ -1347,12 +1347,34 @@ class ApplicationExpression(Expression):
         """
         return self.uncurry()[1]
 
+    def remove_argument(self, idx):
+        """
+        Remove the argument at `idx`.
+
+        Returns:
+          expr: inplace modified expression
+        """
+        n_arguments = len(self.args)
+        assert idx < n_arguments
+
+        # edge case: final argument
+        if idx == n_arguments - 1:
+          return self.function
+
+        application = self
+        for i in range(n_arguments - idx - 2):
+          application = application.function
+        application.function = application.function.function
+
+        return self
+
     def insert_argument(self, idx, expr):
         """
         Insert an argument at `idx` (in the uncurried form of this application)
         with `expr`.
 
         >>> Expression.fromstring("foo(a,b,c)").insert_argument(0, Expression.fromstring("d")
+        foo(d,a,b,c)
         """
         n_arguments = len(self.args)
         assert idx <= n_arguments
@@ -1367,10 +1389,12 @@ class ApplicationExpression(Expression):
         if not isinstance(application, ApplicationExpression):
             # edge case: we're at the base expression. reach into parent and modify, then
             parent.function = ApplicationExpression(application, expr)
-            return
+            return self
 
         application.function = ApplicationExpression(application.function, application.argument)
         application.argument = expr
+
+        return self
 
     def set_argument(self, idx, expr):
         """
@@ -1390,6 +1414,8 @@ class ApplicationExpression(Expression):
           application = application.function
 
         application.argument = expr
+
+        return self
 
     def is_atom(self):
         """
