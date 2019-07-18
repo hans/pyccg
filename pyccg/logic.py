@@ -1347,6 +1347,31 @@ class ApplicationExpression(Expression):
         """
         return self.uncurry()[1]
 
+    def insert_argument(self, idx, expr):
+        """
+        Insert an argument at `idx` (in the uncurried form of this application)
+        with `expr`.
+
+        >>> Expression.fromstring("foo(a,b,c)").insert_argument(0, Expression.fromstring("d")
+        """
+        n_arguments = len(self.args)
+        assert idx <= n_arguments
+
+        application, parent = self, None
+        cursor = n_arguments - idx
+        while cursor > 0:
+            parent = application
+            application = application.function
+            cursor -= 1
+
+        if not isinstance(application, ApplicationExpression):
+            # edge case: we're at the base expression. reach into parent and modify, then
+            parent.function = ApplicationExpression(application, expr)
+            return
+
+        application.function = ApplicationExpression(application.function, application.argument)
+        application.argument = expr
+
     def set_argument(self, idx, expr):
         """
         Replace the argument at `idx` (in the uncurried form of this

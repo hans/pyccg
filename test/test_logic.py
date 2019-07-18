@@ -387,6 +387,22 @@ def test_expression_bound():
       {"x", "y"})
 
 
+def test_insert_argument():
+  cases = [
+      (r"foo(a,b,c)", 0, "d", "foo(d,a,b,c)"),
+      (r"foo(a,b,c)", 1, "d", "foo(a,d,b,c)"),
+      (r"foo(a,b,c)", 3, "d", "foo(a,b,c,d)"),
+  ]
+
+  def do_test(lf, idx, expr, expected):
+    e = Expression.fromstring(lf)
+    e.insert_argument(idx, Expression.fromstring(expr))
+    eq_(str(e), expected)
+
+  for lf, idx, expr, expected in cases:
+    yield do_test, lf, idx, expr, expected
+
+
 def test_set_argument():
   e = Expression.fromstring(r"foo(a,b,c)")
   e.set_argument(2, Expression.fromstring("d"))
