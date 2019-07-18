@@ -2790,7 +2790,7 @@ class Ontology(object):
 
     return inner(expr, [])
 
-  def read_ec_sexpr(self, sexpr):
+  def read_ec_sexpr(self, sexpr, typecheck=True):
     """
     Parse an EC-style S-expression into a typed pyccg logic representation.
     """
@@ -2870,7 +2870,8 @@ class Ontology(object):
 
     # Now run type-inference.
     expr = stack[0][2][0]
-    self.typecheck(expr)
+    if typecheck:
+      self.typecheck(expr)
     return expr, bound_vars
 
   def _make_application(self, pred_name, args):
