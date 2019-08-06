@@ -122,12 +122,12 @@ def test_iter_expressions():
      ((("obj", "boolean"), r"\z1.invented_1(foo,z1)",),),
      ()),
     (3, "Consider both argument orders",
-     ((("boolean", "boolean", "boolean"), r"\z1 z2.and_(z2,z1)"),
+     ((("boolean", "boolean", "boolean"), r"\z2 z1.and_(z1,z2)"),
       (("boolean", "boolean", "boolean"), r"and_")),
      ()),
     (3, "Consider both argument orders for three-place function",
      ((("obj", "obj", "boolean"), r"\z1 z2.threeplace(z1,z2,baz)"),
-      (("obj", "obj", "boolean"), r"\z1 z2.threeplace(z2,z1,baz)")),
+      (("obj", "obj", "boolean"), r"\z2 z1.threeplace(z1,z2,baz)")),
      ()),
     (3, "Enforce type constraints on higher-order functions",
      (),
@@ -451,6 +451,27 @@ def test_normalize():
   eq_(e1, e2)
   ok_(e1 != e3, "%r == %r" % (e1, e3))
   ok_(e2 != e3, "%r == %r" % (e2, e3))
+
+
+def test_normalize_ordering():
+  """
+  Expression normalization should not take variable binding expressions into
+  account when determining how to order renamed variables.
+  """
+  e1 = Expression.fromstring(r"\z1 z2.foo(z1,z2)")
+  e2 = Expression.fromstring(r"\z2 z1.foo(z1,z2)")
+  e3 = Expression.fromstring(r"\z2 z1.foo(z2,z1)")
+
+  e1 = e1.normalize()
+  e2 = e2.normalize()
+  e3 = e3.normalize()
+  eq_(str(e1), r"\z1 z2.foo(z1,z2)")
+  eq_(str(e2), r"\z2 z1.foo(z1,z2)",
+      ("If the bound use of 'z2' were acknowledged here (it shouldn't be), "
+       "this would be rewritten as \\z1 z2."))
+  eq_(str(e3), r"\z1 z2.foo(z1,z2)",
+      ("This one should get normalized, since 'z2' appears in non-binder "
+       "expressions linearly before z1."))
 
 
 def test_unwrap_function():

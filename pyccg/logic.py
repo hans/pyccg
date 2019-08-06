@@ -1048,7 +1048,16 @@ class Expression(SubstituteBindingsI):
                                      self.__class__)
 
     def normalize_inplace(self, ignore=None):
-        """Rename auto-generated unique variables in-place."""
+        """
+        Normalize variables in an expression to a format `z<idx>`, such that
+        `<idx>` orders the variables by their earliest use in the linear
+        expression (or equivalently, in a left / in-order tree traversal).
+
+        (Here the binding of a variable, e.g. as the bound variable in a lambda
+        expression, does not count as "use". This is an important feature for
+        consumers of this method which take the ordering of multiple bound
+        variables in a lambda expression to be semantically significant.)
+        """
         def get_indiv_vars(e):
             if isinstance(e, IndividualVariableExpression):
                 return [e]
@@ -1075,15 +1084,19 @@ class Expression(SubstituteBindingsI):
             elif e.variable.name in seen:
                 continue
 
-            seen.add(e.variable.name)
             if isinstance(e,EventVariableExpression):
-                name = 'e0%i' % (i+1)
-            elif isinstance(e,(VariableBinderExpression, IndividualVariableExpression)):
+                name = 'e0%i' % (len(seen) + 1)
+            elif isinstance(e, IndividualVariableExpression):
                 # bound variables and auto-gen individual variables get z<x>
                 # names
-                name = 'z%i' % (i+1)
+                name = 'z%i' % (len(seen) + 1)
             else:
+                # NB, we skip the case where `e` is a
+                # `VariableBinderExpression` --- by convention, use in such
+                # expressions does not determine ordering.
                 continue
+
+            seen.add(e.variable.name)
 
             # Replace name in all relevant expressions.
             for indiv_var in indiv_vars_dict[e.variable.name]:
