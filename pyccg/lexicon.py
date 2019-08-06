@@ -825,9 +825,10 @@ def augment_lexicon_unification(lex, sentence, ontology, lf):
   novel_tokens = set(tok for tok in sentence if not lex.get_entries(tok))
   known_tokens = set(sentence) - novel_tokens
 
-  induce_tokens_chain = \
+  induce_tokens_chain = itertools.chain(
+      [[]],
       itertools.chain.from_iterable(itertools.combinations(known_tokens, n)
-                                    for n in range(len(known_tokens)))
+                                    for n in range(1, len(known_tokens))))
   ready_for_unification = False
   for induction_set in induce_tokens_chain:
     # we are going to run unification, attempting to infer all novel token
