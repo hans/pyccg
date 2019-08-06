@@ -8,6 +8,7 @@ from functools import reduce
 import itertools
 import logging
 import queue
+import random
 import re
 import sys
 
@@ -479,6 +480,80 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       lf_mixed_ngrams[syntax] = lf_syntax_ngrams[syntax].mix(yield_dist, alpha)
 
     return lf_mixed_ngrams
+
+  def sample_sentence(self, arguments, relation=None):
+    """
+    Forward-sample a sentence given a set of arguments according to the
+    generative model.
+    """
+    # TODO this sort of code probably belongs in a separate "model" somewhere.
+    # For now we'll conflate the lexicon and the probabilistic model ...
+
+    logp = 0.0
+
+    if relation is None:
+      # First sample a relation, assuming that relations are distributed
+      # independently of their arguments.
+      relations = Counter()
+      for entries in self._entries.values():
+        for entry in entries:
+          print(entry.semantics(), self.ontology.get_expr_arity(entry.semantics()))
+          if self.ontology.get_expr_arity(entry.semantics()) == len(arguments):
+            # This is a candidate relation. Store without binding if present.
+            to_store = entry.semantics()
+            if isinstance(to_store, l.VariableBinderExpression):
+              _, to_store = to_store.decompose()
+
+            relations[to_store] += entry.weight()
+
+      relations = Distribution(relations).normalize()
+      relation = relations.sample()
+      logp += np.log(relations[relation])
+
+    # Get the semantic depths of each bound variable in the relation.
+    to_bind = [var for var in relation.free()
+               if var.name not in self.ontology.functions_dict
+               and var.name not in self.ontology.constants_dict]
+    semantic_depths = {arg: l.get_depths(relation, arg) for arg in to_bind}
+    # Get max semantic depth for each argument.
+    semantic_depths = {arg: max(depths.keys())
+                       for arg, depths in semantic_depths.items()}
+    # Reindex by variable number, assuming the expression is normalized (??)
+    semantic_depths = {int(arg.name[1:]): depth
+                       for arg, depth in semantic_depths.items()}
+
+    # Sample a syntactic depth mapping which satisfies prominence preservation.
+    # TODO rejection-sampling for now, but there's probably a better way to do
+    # this.
+    prior_arg_orders = list(itertools.permutations(list(range(1, len(arguments) + 1))))
+    arg_orders = []
+    for arg_order in prior_arg_orders:
+      for arg1, arg2 in zip(arg_order, arg_order[1:]):
+        # arg1 > arg2 in syntactic depth, so require that arg1 >= arg2 in
+        # semantic depth
+        if not semantic_depths[arg1] >= semantic_depths[arg2]:
+          continue
+
+      arg_orders.append(arg_order)
+
+    # TODO weights here .. ?
+    arg_orders = Distribution.uniform(arg_orders)
+    arg_order = arg_orders.sample()
+    logp += np.log(arg_orders[arg_order])
+
+    # TODO
+    # Reconstruct a variable binding expression given this argument order.
+
+    # Lexicalize arguments.
+
+    # Search for possible syntactic categories of the lexicalized relation
+    # given the arguments.
+
+    # Produce a sentence and/or tree derivation.
+
+    print(relation)
+    print(semantic_depths)
+    print(arg_orders)
 
 
 class DerivedCategory(PrimitiveCategory):

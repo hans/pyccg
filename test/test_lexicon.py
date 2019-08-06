@@ -352,6 +352,7 @@ def _make_simple_mock_ontology():
 
       types.new_function("invented_1", (("obj", "boolean"), "obj", "boolean"), lambda f, x: x is not None and f(x)),
 
+      types.new_function("merge", ("obj", "obj", "obj"), lambda x, y: x),
       types.new_function("threeplace", ("obj", "obj", "boolean", "boolean"), lambda x, y, o: True),
   ]
   constants = [types.new_constant("baz", "boolean"),
@@ -582,3 +583,16 @@ def test_zero_shot_type_request_2arg():
   eq_(len(mock.call_args_list), 1)
   args, kwargs = mock.call_args
   eq_(kwargs["type_request"], ontology.types["obj", "obj", "*"])
+
+
+def test_sample_sentence():
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S, N, N
+
+  beats => S\N/N {\z1 z2.merge(z1,z2)}
+  blue => N {foo}
+  black => N {bar}
+  """, ontology=ontology, include_semantics=True)
+
+  print(lex.sample_sentence([l.Expression.fromstring("foo"), l.Expression.fromstring("bar")]))

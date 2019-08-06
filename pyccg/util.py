@@ -76,6 +76,13 @@ class Distribution(Counter):
   def argmax(self):
     return max(self, key=lambda k: self[k])
 
+  def sample(self, **kwargs):
+    if len(self) == 0:
+      raise ValueError("empty distribution")
+
+    choices = list(self.keys())
+    return choices[np.random.choice(len(choices), p=list(self.values()), **kwargs)]
+
   def plot(self, name, out_dir, k=5, xlabel=None, title=None, save_csv=True):
     """
     Save a bar plot of the distribution.
