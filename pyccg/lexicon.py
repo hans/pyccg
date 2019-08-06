@@ -719,27 +719,30 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
   category_sem_arities = lexicon.category_semantic_arities()
 
   lexicon = lexicon.clone()
+
+  # Build lexicon entries with dummy semantic expressions for each of the
+  # query tokens.
   for token, syntax in zip(tokens, candidate_categories):
     var = copy(dummy_vars[token])
     expr = l.IndividualVariableExpression(var)
 
     if lexicon.ontology is not None:
       # assign semantic arity based on syntactic arity
-      # implicitly asserts we have one semantic arity per syntactic category
       try:
-        arity, = category_sem_arities[syntax]
+        arities = category_sem_arities[syntax]
       except KeyError:
-        arity = get_semantic_arity(syntax)
-      except ValueError:
-        arities = map(str, category_sem_arities[syntax])
-        raise RuntimeError(f"category {syntax} has multiple observed lexicon arities: "
-                           f"{' '.join(arities)}. "
-                           "This is not supported at the moment.")
+        arities = [get_semantic_arity(syntax)]
 
-      var.type = lexicon.ontology.types[("*",) * arity + ("?",)]
-      expr.typecheck()
+      exprs = []
+      for arity in arities:
+        var = copy(dummy_vars[token])
+        var.type = lexicon.ontology.types[("*",) * arity + ("?",)]
+        expr = l.IndividualVariableExpression(var)
+        exprs.append(expr)
 
-    lexicon.set_entries(token, [(syntax, expr, 1.0)])
+      lexicon.set_entries(token, [(syntax, expr, 1.0) for expr in exprs])
+    else:
+      lexicon.set_entries(token, [(syntax, expr, 1.0)])
 
   parse_results = []
 
