@@ -428,6 +428,44 @@ def test_augment_lexicon_unification_partial():
   ok_("foo" in exprs["white"])
 
 
+def test_augment_lexicon_unification_multiple_apparent_types():
+  """
+  Unification should go through even when there is uniform ambiguity about the
+  possible semantic arities of a novel entry given its syntax.
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- N
+
+  # NB need another N\N/N entry, otherwise there are no examples of N\N/N and
+  # the category prior will be borked.
+  or => N\N/N {\f g x.and_(f(x),g(x))}
+
+  and => N\N/N {\f g x.and_(f(x),g(x))}
+  and => N\N/N {\f g x.and_(f(x),g)}
+  blue => N {foo}
+  black => N {bar}
+
+  # NB here the `N` category has a zero-arity semantic expression. This will
+  # lead to ambiguity in the arity of the novel `N` entry, because we have an
+  # entry for `and` above which takes this 0-arity arg.
+  green => N {baz}
+  """, ontology=ontology, include_semantics=True)
+
+  # NB in this case, one of the words ("and") is known!
+  sentence = "red and black".split()
+  lf = l.Expression.fromstring(r"\x.and_(foo(x),bar(x))")
+  ontology.typecheck(lf)
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  eq_(set(new_lex.get_entries("and")), set(lex.get_entries("and")),
+      "no update for token 'and' should be necessary")
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["red", "white"]}
+  ok_("foo" in exprs["red"])
+  ok_("bar" in exprs["red"])
+
+
 def test_fromstring_typechecks():
   """
   Ensure that `Lexicon.fromstring` type-checks and assigns types to provided

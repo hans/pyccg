@@ -855,42 +855,47 @@ def augment_lexicon_unification(lex, sentence, ontology, lf):
     return lex
 
   L.debug("Running unification induction with tokens: %s", to_induce)
-
-  # Take the max-scoring candidate parse. This will serve as the "guide parse"
-  # -- all induced tokens must have semantic types which match the semantic
-  # types of their companion dummy variables in this semantic parse.
-  _, guiding_parse, apparent_types = max(candidate_parses, key=lambda p:p[0])
-
   lex = lex.clone()
-  queue, new_entries = [(best_parse, lf)], set()
-  while queue:
-    node, expr = queue.pop()
-    token, parse_op = node.label()
-    if parse_op == "Leaf":
-      # Is this an induction token? If so, make sure its type matches what's
-      # expected under the guiding parse.
-      token_str = token._token
-      if token_str not in to_induce:
-        # Not an induction token. Skip.
+
+  # Take each candidate parse in turn as a "guiding parse." The function of
+  # the guiding parse is to 1) constrain the ways in which LFs are split, and
+  # 2) constrain the desired types of the lexical entries at the leaves of the
+  # parse.
+  #
+  # TODO this could be extremely computationally expensive for large candidate
+  # sets.
+  new_entries = set()
+  for _, guiding_parse, apparent_types in candidate_parses:
+    # BFS through parse-guided semantic splits.
+    queue = [(guiding_parse, lf)]
+    while queue:
+      node, expr = queue.pop()
+      token, parse_op = node.label()
+      if parse_op == "Leaf":
+        # Is this an induction token? If so, make sure its type matches what's
+        # expected under the guiding parse.
+        token_str = token._token
+        if token_str not in to_induce:
+          # Not an induction token. Skip.
+          continue
+
+        # print(token_str, expr.type, apparent_types[token_str])
+        if token_str in to_induce and not expr.type.resolve(apparent_types[token_str]):
+          continue
+
+        new_entries.add((token._token, token.categ(), expr))
         continue
 
-      # print(token_str, expr.type, apparent_types[token_str])
-      if token_str in to_induce and not expr.type.resolve(apparent_types[token_str]):
-        continue
+      # get left and right children
+      left, right = list(node)
 
-      new_entries.add((token._token, token.categ(), expr))
-      continue
+      for left_split, right_split, cand_direction in ontology.iter_application_splits(expr):
+        if parse_op == ">" and cand_direction != "/" \
+            or parse_op == "<" and cand_direction != "\\":
+          continue
 
-    # get left and right children
-    left, right = list(node)
-
-    for left_split, right_split, cand_direction in ontology.iter_application_splits(expr):
-      if parse_op == ">" and cand_direction != "/" \
-          or parse_op == "<" and cand_direction != "\\":
-        continue
-
-      queue.append((left, left_split))
-      queue.append((right, right_split))
+        queue.append((left, left_split))
+        queue.append((right, right_split))
 
   for token, categ, semantics in new_entries:
     lex.add_entry(token, categ, semantics=semantics, weight=0.001)
