@@ -730,6 +730,11 @@ def attempt_candidate_parse(lexicon, tokens, candidate_categories,
         arity, = category_sem_arities[syntax]
       except KeyError:
         arity = get_semantic_arity(syntax)
+      except ValueError:
+        arities = map(str, category_sem_arities[syntax])
+        raise RuntimeError(f"category {syntax} has multiple observed lexicon arities: "
+                           f"{' '.join(arities)}. "
+                           "This is not supported at the moment.")
 
       var.type = lexicon.ontology.types[("*",) * arity + ("?",)]
       expr.typecheck()
