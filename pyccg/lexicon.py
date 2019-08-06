@@ -1231,10 +1231,17 @@ def augment_lexicon(old_lex, query_tokens, query_token_syntaxes,
     # HACK: post-hoc normalize by meaning. This should come out naturally once
     # we have the right generative model defined earlier on.
     meaning_masses = Counter()
+    decomposed_meanings = []
     for (_, meaning), weight in candidates.items():
+      if isinstance(meaning, l.VariableBinderExpression):
+        # ignore variable binding; condition only on body
+        _, meaning = meaning.decompose()
+      decomposed_meanings.append(meaning)
       meaning_masses[meaning] += weight
-    candidates = {(syntax, meaning): weight / meaning_masses[meaning]
-                  for (syntax, meaning), weight in candidates.items()}
+
+    candidates = {(syntax, meaning): weight / meaning_masses[decomposed_meaning]
+                  for ((syntax, meaning), weight), decomposed_meaning
+                  in zip(candidates.items(), decomposed_meanings)}
 
     total_mass = sum(candidates.values())
     if len(candidates) > 0:
