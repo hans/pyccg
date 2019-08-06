@@ -30,7 +30,7 @@ class Distribution(Counter):
 
   @property
   def support(self):
-    return self.keys()
+    return [key for key, value in self.items() if value > 0]
 
   def ensure_support(self, keys):
     for key in keys:
