@@ -466,6 +466,31 @@ def test_augment_lexicon_unification_multiple_apparent_types():
   ok_("bar" in exprs["red"])
 
 
+def test_augment_lexicon_unification_no_op():
+  """
+  ensure that unification supports inducing no-op semantics for novel tokens
+  `augment_lexicon_unification`
+  """
+  ontology = _make_simple_mock_ontology()
+  lex = Lexicon.fromstring(r"""
+  :- S, N
+
+  blah => S/N {\x.and_(x,baz)}
+  blue => N {foo}
+  """, ontology=ontology, include_semantics=True)
+
+  sentence = "the blue".split()
+  lf = l.Expression.fromstring(r"foo")
+  ontology.typecheck(lf)
+  new_lex = augment_lexicon_unification(lex, sentence, ontology, lf)
+
+  eq_(set(new_lex.get_entries("blue")), set(lex.get_entries("blue")),
+      "no update for token 'blue' should be necessary")
+  exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
+           for token in ["blah"]}
+  ok_(r"\z1.z1" in exprs["blah"])
+
+
 def test_fromstring_typechecks():
   """
   Ensure that `Lexicon.fromstring` type-checks and assigns types to provided
