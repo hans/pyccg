@@ -20,7 +20,7 @@ from frozendict import frozendict
 import numpy as np
 
 from pyccg.lexicon import Lexicon, get_yield, set_yield
-from pyccg.logic import TypeSystem, Ontology, NegatedExpression
+from pyccg.logic import TypeSystem, Ontology, Expression, NegatedExpression
 from pyccg.model import Model
 from pyccg.word_learner import WordLearner
 
@@ -252,6 +252,15 @@ initial_lexicon = Lexicon.fromstring(r"""
   doesn't => (S\N)/(S\N) {\a.not(a)} <0.5>
 """, ontology, include_semantics=True)
 
+expected_lexicon = Lexicon.fromstring(r"""
+  :- S, N
+
+  fear => (S\N)/N {\z2 z1.be_about(z1,fear,z2)}
+  frighten => (S\N)/N {\z1 z2.cause(z1,become(z2,fear))}
+  girl => N {\z1.female(z1)}
+  toy => N {\z1.toy(z1)}
+""", ontology, include_semantics=True)
+
 ######
 # Evaluation data.
 L.info("Preparing evaluation data.")
@@ -419,6 +428,18 @@ def eval_2afc_zeroshot(learner, example, expected_idx, asserts=True):
 
 
 def eval_model(bootstrap=False, **learner_kwargs):
+  print("Forward sampling demonstration:")
+
+  from pyccg.chart import printCCGDerivation
+  for arg_order in [["toy", "girl"], ["girl", "toy"]]:
+    arguments = [expected_lexicon.get_entries(word)[0].semantics()
+                 for word in arg_order]
+    print(arg_order)
+    printCCGDerivation(expected_lexicon.sample_sentence(arguments))
+    print()
+
+  print("-------------------")
+
   L.info("Building model.")
 
   learner_kwargs["limit_induction"] = True

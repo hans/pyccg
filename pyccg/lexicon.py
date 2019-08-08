@@ -518,7 +518,6 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       relations = Counter()
       for entries in self._entries.values():
         for entry in entries:
-          print(entry.semantics(), self.ontology.get_expr_arity(entry.semantics()))
           if self.ontology.get_expr_arity(entry.semantics()) == len(arguments):
             # This is a candidate relation. Store without binding if present.
             to_store = entry.semantics()
@@ -574,7 +573,10 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     arg_entries = []
     for arg_i in arguments:
       # TODO weighted sampling
-      arg_i_entries = Distribution.uniform(self.get_entries_with_semantics(arg_i))
+      arg_i_entries = list(self.get_entries_with_semantics(arg_i))
+      if not arg_i_entries:
+        raise ValueError("no entries found with semantics %r" % arg_i)
+      arg_i_entries = Distribution.uniform(arg_i_entries)
       arg_i_entry = arg_i_entries.sample()
 
       logp += arg_i_entries[arg_i_entry]
