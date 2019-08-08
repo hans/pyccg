@@ -4,7 +4,7 @@ from nose.tools import *
 
 from pyccg.lexicon import *
 from pyccg import logic as l
-from pyccg.chart import WeightedCCGChartParser
+from pyccg.chart import WeightedCCGChartParser, printCCGDerivation
 from pyccg.util import Distribution
 
 from nltk.ccg.lexicon import FunctionalCategory, PrimitiveCategory, Direction
@@ -595,4 +595,5 @@ def test_sample_sentence():
   black => N {bar}
   """, ontology=ontology, include_semantics=True)
 
-  print(lex.sample_sentence([l.Expression.fromstring("foo"), l.Expression.fromstring("bar")]))
+  tree = lex.sample_sentence([l.Expression.fromstring("foo"), l.Expression.fromstring("bar")])
+  printCCGDerivation(tree)

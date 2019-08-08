@@ -24,6 +24,7 @@ class Distribution(Counter):
   @classmethod
   def uniform(cls, support):
     ret = cls()
+    support = list(support)
     for key in support:
       ret[key] = 1 / len(support)
     return ret

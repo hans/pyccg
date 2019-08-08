@@ -12,8 +12,9 @@ import random
 import re
 import sys
 
+from nltk import Tree
 from nltk.ccg import lexicon as ccg_lexicon
-from nltk.ccg.api import PrimitiveCategory, FunctionalCategory, AbstractCCGCategory
+from nltk.ccg.api import PrimitiveCategory, FunctionalCategory, AbstractCCGCategory, Direction
 import numpy as np
 from tqdm import tqdm, trange
 
@@ -169,6 +170,26 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
     token = Token(word, category, semantics=semantics, weight=weight)
     self._entries[word].append(token)
+
+  def get_entries_with_category(self, category):
+    """
+    Returns a generator yielding `Token` instances with the given syntactic
+    category.
+    """
+    for entries in self._entries.values():
+      for entry in entries:
+        if entry.categ() == category:
+          yield entry
+
+  def get_entries_with_semantics(self, semantics):
+    """
+    Returns a generator yielding `Token` instances with the given semantic
+    expression.
+    """
+    for entries in self._entries.values():
+      for entry in entries:
+        if entry.semantics() == semantics:
+          yield entry
 
   def __eq__(self, other):
     return isinstance(other, Lexicon) and self._starts == other._starts \
@@ -483,7 +504,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
   def sample_sentence(self, arguments, relation=None):
     """
-    Forward-sample a sentence given a set of arguments according to the
+    Forward-sample a sentence given a set of argument LFs, according to the
     generative model.
     """
     # TODO this sort of code probably belongs in a separate "model" somewhere.
@@ -510,10 +531,13 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       relation = relations.sample()
       logp += np.log(relations[relation])
 
-    # Get the semantic depths of each bound variable in the relation.
     to_bind = [var for var in relation.free()
                if var.name not in self.ontology.functions_dict
                and var.name not in self.ontology.constants_dict]
+    # keep a mapping of integer index to actual variable, for later
+    idx_to_arg = {int(arg.name[1:]): arg for arg in to_bind}
+
+    # Get the semantic depths of each bound variable in the relation.
     semantic_depths = {arg: l.get_depths(relation, arg) for arg in to_bind}
     # Get max semantic depth for each argument.
     semantic_depths = {arg: max(depths.keys())
@@ -541,19 +565,92 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     arg_order = arg_orders.sample()
     logp += np.log(arg_orders[arg_order])
 
-    # TODO
     # Reconstruct a variable binding expression given this argument order.
+    expr = relation
+    for arg_idx in arg_order[::-1]:
+      expr = l.LambdaExpression(idx_to_arg[arg_idx], expr)
 
     # Lexicalize arguments.
+    arg_entries = []
+    for arg_i in arguments:
+      # TODO weighted sampling
+      arg_i_entries = Distribution.uniform(self.get_entries_with_semantics(arg_i))
+      arg_i_entry = arg_i_entries.sample()
+
+      logp += arg_i_entries[arg_i_entry]
+      arg_entries.append(arg_i_entry)
 
     # Search for possible syntactic categories of the lexicalized relation
     # given the arguments.
+    # TODO don't make such a strong assumption!
+    if len(arguments) == 0:
+      search_category = "S"
+    elif len(arguments) == 1:
+      search_category = r"S\N"
+    elif len(arguments) == 2:
+      search_category = r"S\N/N"
+    else:
+      raise ValueError("cannot handle more than 2-ary arguments at the moment.")
+    search_category = self.parse_category(search_category)
+
+    # Sample a relation entry with the required category.
+    relation_entries = self.get_entries_with_category(search_category)
+    # TODO weighted sampling
+    relation_entries = Distribution.uniform(relation_entries)
+    relation_entry = relation_entries.sample()
+    logp += np.log(relation_entries[relation_entry])
 
     # Produce a sentence and/or tree derivation.
+    # Navigate the syntactic type of `relation` with a zipper, storing at each
+    # step pointers downward and upward in the type.
+    unrolled_parse_ops = [("S", None, ())]
+    syntax_node = relation_entry.categ()
+    while isinstance(syntax_node, FunctionalCategory):
+      unrolled_parse_ops.append((syntax_node.arg(), syntax_node.dir(),
+                                 tuple(unrolled_parse_ops)))
 
-    print(relation)
-    print(semantic_depths)
-    print(arg_orders)
+      syntax_node = syntax_node.res()
+
+    # Now compose a tree bottom-up.
+    def _make_leaf_node(entry):
+      return Tree((entry, "Leaf"), [Tree(entry, [entry._token])])
+    leaves = {arg: _make_leaf_node(arg_i_entry)
+              for arg, arg_i_entry in zip(arguments, arg_entries)}
+    leaves["relation"] = _make_leaf_node(relation_entry)
+
+    tree = leaves["relation"]
+    for (arg_syntax, direction, arg_zipper), arg, arg_entry \
+        in zip(unrolled_parse_ops[::-1], arguments, arg_entries):
+      tree_node = tree.label()[0]
+      tree_tokens = tree_node._token
+      if isinstance(tree_tokens, str):
+        tree_tokens = [tree_tokens]
+
+      # fetch leaf node to be merged with the accumulated tree
+      arg_leaf = leaves[arg]
+
+      if direction.is_forward():
+        op = ">"
+        children = [tree, arg_leaf]
+        tokens = tree_tokens + [arg_entry._token]
+      else:
+        op = "<"
+        children = [arg_leaf, tree]
+        tokens = [arg_entry._token] + tree_tokens
+
+      # Walk back up the zipper to produce the constituent's syntactic type.
+      node_syntax = PrimitiveCategory(arg_zipper[0][0])
+      for zip_arg_syntax, zip_dir, _ in arg_zipper[1:]:
+        node_syntax = FunctionalCategory(node_syntax, zip_arg_syntax, Direction(zip_dir, []))
+
+      # Node semantics: simple function application.
+      node_semantics = l.ApplicationExpression(
+          tree_node.semantics(), arg_entry.semantics()).simplify()
+
+      lhs = (Token(tokens, node_syntax, node_semantics), op)
+      tree = Tree(lhs, children)
+
+    return tree
 
 
 class DerivedCategory(PrimitiveCategory):
