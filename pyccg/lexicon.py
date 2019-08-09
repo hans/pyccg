@@ -575,25 +575,22 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       # TODO weights here .. ?
       arg_orders = Distribution.uniform(arg_orders)
       for arg_order in arg_orders:
-        # Reconstruct a variable binding expression given this argument order.
-        expr = relation
-        for arg_idx in arg_order[::-1]:
-          expr = l.LambdaExpression(idx_to_arg[arg_idx], expr)
-
-        # Search for possible syntactic categories of the lexicalized relation
-        # given the arguments.
-        # TODO don't make such a strong assumption!
-        if len(arguments) == 0:
-          search_category = "S"
-        elif len(arguments) == 1:
-          search_category = r"S\N"
-        elif len(arguments) == 2:
-          search_category = r"S\N/N"
-        else:
-          raise ValueError("cannot handle more than 2-ary arguments at the moment.")
-        search_category = self.parse_category(search_category)
-
         for arg_entry_comb in itertools.product(*arg_entries):
+          # Search for possible syntactic categories of the lexicalized relation
+          # given the arguments.
+          #
+          # TODO this should be computed programmatically from arg_order +
+          # arg_entry_comb
+          if len(arguments) == 0:
+            search_category = "S"
+          elif len(arguments) == 1:
+            search_category = r"S\N"
+          elif len(arguments) == 2:
+            search_category = r"S\N/N"
+          else:
+            raise ValueError("cannot handle more than 2-ary arguments at the moment.")
+          search_category = self.parse_category(search_category)
+
           # Sample a relation entry with the required category.
           relation_entries = self.get_entries_with_category(search_category)
           # TODO weighted sampling
@@ -602,11 +599,6 @@ class Lexicon(ccg_lexicon.CCGLexicon):
           for relation_entry in relation_entries:
             # Now compose a tree bottom-up, ordering the arguments according to
             # `arg_order`.
-            #
-            # TODO I think these ordering notions are different -- arg_order
-            # specifies the mapping from reference order to *semantic
-            # composition* order, while `_build_sentence_tree` expects linear
-            # order spec
             tree = self._build_sentence_tree(
                 relation_entry,
                 [arg_entry_comb[idx - 1] for idx in arg_order])
@@ -637,57 +629,40 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     Args:
       verb_entry: A lexical entry for the root verb.
       argument_entries: lexical entries for each of the verb's arguments, in
-        linear order of the target sentence
+        order of application with the verb entry
 
     Returns:
       tree: a CCG parse tree
     """
     def _make_leaf_node(entry):
       return Tree((entry, "Leaf"), [Tree(entry, [entry._token])])
-    leaves = list(argument_entries[:])
-    # NB hard-codes relation position
-    # should be computable by looking at # backwards and forwards apps?
-    leaves.insert(1, verb_entry)
-    leaves = list(map(_make_leaf_node, leaves))
+    # compute leave reprs, sorted by desired processing order
+    leaves = list(map(_make_leaf_node, [verb_entry] + list(argument_entries)))
 
-    # NB hard-codes relation position
-    tree = leaves[1]
-    # token span of tree built so far
-    span = (1, 1)
-    while True:
+    tree = leaves[0]
+    for arg_leaf in leaves[1:]:
       tree_node = tree.label()[0]
-      if not isinstance(tree_node.categ(), FunctionalCategory):
-        # full tree completed.
-        break
-
-      direction = tree_node.categ().dir()
-      left_edge, right_edge = span
+      arg_node = arg_leaf.label()[0]
 
       tree_tokens = tree_node._token
       if isinstance(tree_tokens, str):
         tree_tokens = [tree_tokens]
 
-      # fetch leaf node to be merged next, and prepare various infos
-      if direction.is_forward():
-        arg_leaf = leaves[right_edge + 1]
-        span = (left_edge, right_edge + 1)
-
+      # prepare constituent metadata
+      if tree_node.categ().dir().is_forward():
         op = ">"
         children = [tree, arg_leaf]
-        tokens = tree_tokens + [arg_leaf.label()[0]._token]
+        tokens = tree_tokens + [arg_node._token]
       else:
-        arg_leaf = leaves[left_edge - 1]
-        span = (left_edge - 1, right_edge)
-
         op = "<"
         children = [arg_leaf, tree]
-        tokens = [arg_leaf.label()[0]._token] + tree_tokens
+        tokens = [arg_node._token] + tree_tokens
 
       node_syntax = tree_node.categ().res()
 
       # Node semantics: simple function application.
       node_semantics = l.ApplicationExpression(
-          tree_node.semantics(), arg_leaf.label()[0].semantics()).simplify()
+          tree_node.semantics(), arg_node.semantics()).simplify()
 
       lhs = (Token(tokens, node_syntax, node_semantics), op)
       tree = Tree(lhs, children)
