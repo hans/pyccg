@@ -40,6 +40,10 @@ class Distribution(Counter):
 
     return self
 
+  def drop(self, keys):
+    for key in keys:
+      del self[key]
+
   def __mul__(self, scale):
     assert isinstance(scale, (int, float))
 

@@ -256,7 +256,7 @@ expected_lexicon = Lexicon.fromstring(r"""
   :- S, N
 
   fear => (S\N)/N {\z2 z1.be_about(z1,fear,z2)}
-  frighten => (S\N)/N {\z1 z2.cause(z1,become(z2,fear))}
+  frighten => (S\N)/N {\z2 z1.cause(z1,become(z2,fear))}
   girl => N {\z1.female(z1)}
   toy => N {\z1.toy(z1)}
 """, ontology, include_semantics=True)
@@ -431,14 +431,29 @@ def eval_model(bootstrap=False, **learner_kwargs):
   print("Forward sampling demonstration:")
 
   from pyccg.chart import printCCGDerivation
-  for arg_order in [["toy", "girl"], ["girl", "toy"]]:
-    arguments = [expected_lexicon.get_entries(word)[0].semantics()
-                 for word in arg_order]
-    print(arg_order)
-    printCCGDerivation(expected_lexicon.sample_sentence(arguments))
-    print()
+  licensed_exprs = {
+    r"be_about(\z1.female(z1),fear,\z1.toy(z1))",
+    r"cause(\z1.toy(z1),become(\z1.female(z1),fear))"
+  }
+  arguments = [expected_lexicon.get_entries(word)[0].semantics()
+                for word in ["toy", "girl"]]
+  dist, trees = expected_lexicon.sample_sentence(arguments, return_dist=True)
+  filtered_trees = []
+  for i, tree in enumerate(trees):
+    if str(tree.label()[0].semantics()) in licensed_exprs:
+      filtered_trees.append(tree)
+    else:
+      filtered_trees.append(None)
+      dist.drop((i,))
 
-  print("-------------------")
+  dist = dist.normalize()
+  for i, tree in enumerate(filtered_trees):
+    if tree is None: continue
+    print(dist[i])
+    printCCGDerivation(tree)
+
+  #########
+  print("==================")
 
   L.info("Building model.")
 
