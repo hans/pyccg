@@ -2938,6 +2938,13 @@ class Ontology(object):
     # TODO: should probably expect inputs to be typechecked
     self.typecheck(expr)
 
+    # Edge case: yield unary no-op splits.
+    no_op_var = Variable("z1", type=expr.type)
+    no_op = LambdaExpression(no_op_var, IndividualVariableExpression(no_op_var))
+    yield no_op, expr, "/"
+    yield expr, no_op, "\\"
+
+    # General case: yield factored subexpressions
     for subexpr, parent, ctx_bound_vars in get_subexpressions(expr, track_parents=True):
       # Extract existing bound variables + some subset of predicates used in
       # the subexpression.

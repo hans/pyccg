@@ -489,6 +489,14 @@ def test_iter_application_splits():
         # should not shadow existing bound variables
         (r"\z1 z1.z1(z1)", None, None),
       }),
+
+    (r"cube(a)",
+      {
+        # should produce unary no-op splits
+        (r"\z1.z1", r"cube(a)", "/"),
+        (r"cube(a)", r"\z1.z1", "\\")
+      },
+      {}),
   ]
 
   def do_test(expression, expected_members, expected_non_members):
@@ -499,8 +507,8 @@ def test_iter_application_splits():
     for part1, part2, dir in ontology.iter_application_splits(expr):
       # print("\t\t",part1, "\t", part2, "\t", dir)
       split_tuples.append((str(part1), str(part2), dir))
-    # from pprint import pprint
-    # pprint(split_tuples)
+    from pprint import pprint
+    pprint(split_tuples)
 
     all_parts = set(part1 for part1, _, _ in split_tuples) | set(part2 for _, part2, _ in split_tuples)
 
