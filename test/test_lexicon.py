@@ -477,6 +477,7 @@ def test_augment_lexicon_unification_no_op():
 
   blah => S/N {\x.and_(x,baz)}
   blue => N {foo}
+  black => N {foo}
   """, ontology=ontology, include_semantics=True)
 
   sentence = "the blue".split()
@@ -487,8 +488,8 @@ def test_augment_lexicon_unification_no_op():
   eq_(set(new_lex.get_entries("blue")), set(lex.get_entries("blue")),
       "no update for token 'blue' should be necessary")
   exprs = {token: {str(entry.semantics()) for entry in new_lex.get_entries(token)}
-           for token in ["blah"]}
-  ok_(r"\z1.z1" in exprs["blah"])
+           for token in ["blue", "the"]}
+  ok_(r"\z1.z1" in exprs["the"])
 
 
 def test_fromstring_typechecks():
