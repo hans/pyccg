@@ -90,6 +90,7 @@ def test_get_expr_arity():
   cases = [
       (r"\x.x", 1),
       (r"x", 0),
+      (r"\z3 z2.foo(z2(\z1.z3(z1)))", 2),
   ]
 
   def do_case(expr, expected):
