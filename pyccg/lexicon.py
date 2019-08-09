@@ -502,7 +502,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
     return lf_mixed_ngrams
 
-  def sample_sentence(self, arguments, relation=None):
+  def sample_sentence(self, arguments, relation=None, return_dist=False):
     """
     Forward-sample a sentence given a set of argument LFs, according to the
     generative model.
@@ -510,7 +510,12 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     # TODO this sort of code probably belongs in a separate "model" somewhere.
     # For now we'll conflate the lexicon and the probabilistic model ...
 
-    logp = 0.0
+    ret = Distribution()
+    ret_trees = []
+
+    # necessary to impose arbitrary reference order on the `arguments`
+    # collection -- we'll iterate over all orderings eventually
+    arguments = tuple(arguments)
 
     if relation is None:
       # First sample a relation, assuming that relations are distributed
@@ -527,47 +532,6 @@ class Lexicon(ccg_lexicon.CCGLexicon):
             relations[to_store] += entry.weight()
 
       relations = Distribution(relations).normalize()
-      relation = relations.sample()
-      logp += np.log(relations[relation])
-
-    to_bind = [var for var in relation.free()
-               if var.name not in self.ontology.functions_dict
-               and var.name not in self.ontology.constants_dict]
-    # keep a mapping of integer index to actual variable, for later
-    idx_to_arg = {int(arg.name[1:]): arg for arg in to_bind}
-
-    # Get the semantic depths of each bound variable in the relation.
-    semantic_depths = {arg: l.get_depths(relation, arg) for arg in to_bind}
-    # Get max semantic depth for each argument.
-    semantic_depths = {arg: max(depths.keys())
-                       for arg, depths in semantic_depths.items()}
-    # Reindex by variable number, assuming the expression is normalized (??)
-    semantic_depths = {int(arg.name[1:]): depth
-                       for arg, depth in semantic_depths.items()}
-
-    # Sample a syntactic depth mapping which satisfies prominence preservation.
-    # TODO rejection-sampling for now, but there's probably a better way to do
-    # this.
-    prior_arg_orders = list(itertools.permutations(list(range(1, len(arguments) + 1))))
-    arg_orders = []
-    for arg_order in prior_arg_orders:
-      for arg1, arg2 in zip(arg_order, arg_order[1:]):
-        # arg1 > arg2 in syntactic depth, so require that arg1 >= arg2 in
-        # semantic depth
-        if not semantic_depths[arg1] >= semantic_depths[arg2]:
-          continue
-
-      arg_orders.append(arg_order)
-
-    # TODO weights here .. ?
-    arg_orders = Distribution.uniform(arg_orders)
-    arg_order = arg_orders.sample()
-    logp += np.log(arg_orders[arg_order])
-
-    # Reconstruct a variable binding expression given this argument order.
-    expr = relation
-    for arg_idx in arg_order[::-1]:
-      expr = l.LambdaExpression(idx_to_arg[arg_idx], expr)
 
     # Lexicalize arguments.
     arg_entries = []
@@ -576,78 +540,154 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       arg_i_entries = list(self.get_entries_with_semantics(arg_i))
       if not arg_i_entries:
         raise ValueError("no entries found with semantics %r" % arg_i)
+
       arg_i_entries = Distribution.uniform(arg_i_entries)
-      arg_i_entry = arg_i_entries.sample()
+      arg_entries.append(arg_i_entries)
 
-      logp += arg_i_entries[arg_i_entry]
-      arg_entries.append(arg_i_entry)
+    for relation in relations:
+      to_bind = [var for var in relation.free()
+                if var.name not in self.ontology.functions_dict
+                and var.name not in self.ontology.constants_dict]
+      # keep a mapping of integer index to actual variable, for later
+      idx_to_arg = {int(arg.name[1:]): arg for arg in to_bind}
 
-    # Search for possible syntactic categories of the lexicalized relation
-    # given the arguments.
-    # TODO don't make such a strong assumption!
-    if len(arguments) == 0:
-      search_category = "S"
-    elif len(arguments) == 1:
-      search_category = r"S\N"
-    elif len(arguments) == 2:
-      search_category = r"S\N/N"
-    else:
-      raise ValueError("cannot handle more than 2-ary arguments at the moment.")
-    search_category = self.parse_category(search_category)
+      # Get the semantic depths of each bound variable in the relation.
+      semantic_depths = {arg: l.get_depths(relation, arg) for arg in to_bind}
+      # Get max semantic depth for each argument.
+      semantic_depths = {arg: max(depths.keys())
+                        for arg, depths in semantic_depths.items()}
+      # Reindex by variable number, assuming the expression is normalized (??)
+      semantic_depths = {int(arg.name[1:]): depth
+                        for arg, depth in semantic_depths.items()}
 
-    # Sample a relation entry with the required category.
-    relation_entries = self.get_entries_with_category(search_category)
-    # TODO weighted sampling
-    relation_entries = Distribution.uniform(relation_entries)
-    relation_entry = relation_entries.sample()
-    logp += np.log(relation_entries[relation_entry])
+      # Retain syntactic depth mappings which satisfy prominence preservation.
+      prior_arg_orders = list(itertools.permutations(list(range(1, len(arguments) + 1))))
+      arg_orders = []
+      for arg_order in prior_arg_orders:
+        for arg1, arg2 in zip(arg_order, arg_order[1:]):
+          # arg1 > arg2 in syntactic depth, so require that arg1 >= arg2 in
+          # semantic depth
+          if not semantic_depths[arg1] >= semantic_depths[arg2]:
+            continue
 
-    # Produce a sentence and/or tree derivation.
-    # Navigate the syntactic type of `relation` with a zipper, storing at each
-    # step pointers downward and upward in the type.
-    unrolled_parse_ops = [("S", None, ())]
-    syntax_node = relation_entry.categ()
-    while isinstance(syntax_node, FunctionalCategory):
-      unrolled_parse_ops.append((syntax_node.arg(), syntax_node.dir(),
-                                 tuple(unrolled_parse_ops)))
+        arg_orders.append(arg_order)
 
-      syntax_node = syntax_node.res()
+      # TODO weights here .. ?
+      arg_orders = Distribution.uniform(arg_orders)
+      for arg_order in arg_orders:
+        # Reconstruct a variable binding expression given this argument order.
+        expr = relation
+        for arg_idx in arg_order[::-1]:
+          expr = l.LambdaExpression(idx_to_arg[arg_idx], expr)
 
-    # Now compose a tree bottom-up.
+        # Search for possible syntactic categories of the lexicalized relation
+        # given the arguments.
+        # TODO don't make such a strong assumption!
+        if len(arguments) == 0:
+          search_category = "S"
+        elif len(arguments) == 1:
+          search_category = r"S\N"
+        elif len(arguments) == 2:
+          search_category = r"S\N/N"
+        else:
+          raise ValueError("cannot handle more than 2-ary arguments at the moment.")
+        search_category = self.parse_category(search_category)
+
+        for arg_entry_comb in itertools.product(*arg_entries):
+          # Sample a relation entry with the required category.
+          relation_entries = self.get_entries_with_category(search_category)
+          # TODO weighted sampling
+          relation_entries = Distribution.uniform(relation_entries)
+
+          for relation_entry in relation_entries:
+            # Now compose a tree bottom-up, ordering the arguments according to
+            # `arg_order`.
+            #
+            # TODO I think these ordering notions are different -- arg_order
+            # specifies the mapping from reference order to *semantic
+            # composition* order, while `_build_sentence_tree` expects linear
+            # order spec
+            tree = self._build_sentence_tree(
+                relation_entry,
+                [arg_entry_comb[idx - 1] for idx in arg_order])
+
+            # collect likelihood elements
+            component_ps = [relations[relation],
+                            arg_orders[arg_order],
+                            relation_entries[relation_entry]]
+            component_ps += [arg_i_entries[arg_entry]
+                             for arg_i_entries, arg_entry
+                             in zip(arg_entries, arg_entry_comb)]
+            logp = sum(np.log(p) for p in component_ps)
+
+            ret[len(ret_trees)] = logp
+            ret_trees.append(tree)
+
+      ret = ret.normalize()
+      if return_dist:
+        return ret, ret_trees
+
+      sample = ret.sample()
+      return ret_trees[sample]
+
+  def _build_sentence_tree(self, verb_entry, argument_entries):
+    """
+    Compose lexical entries for a verb and its arguments into a full sentence.
+
+    Args:
+      verb_entry: A lexical entry for the root verb.
+      argument_entries: lexical entries for each of the verb's arguments, in
+        linear order of the target sentence
+
+    Returns:
+      tree: a CCG parse tree
+    """
     def _make_leaf_node(entry):
       return Tree((entry, "Leaf"), [Tree(entry, [entry._token])])
-    leaves = {arg: _make_leaf_node(arg_i_entry)
-              for arg, arg_i_entry in zip(arguments, arg_entries)}
-    leaves["relation"] = _make_leaf_node(relation_entry)
+    leaves = list(argument_entries[:])
+    # NB hard-codes relation position
+    # should be computable by looking at # backwards and forwards apps?
+    leaves.insert(1, verb_entry)
+    leaves = list(map(_make_leaf_node, leaves))
 
-    tree = leaves["relation"]
-    for (arg_syntax, direction, arg_zipper), arg, arg_entry \
-        in zip(unrolled_parse_ops[::-1], arguments, arg_entries):
+    # NB hard-codes relation position
+    tree = leaves[1]
+    # token span of tree built so far
+    span = (1, 1)
+    while True:
       tree_node = tree.label()[0]
+      if not isinstance(tree_node.categ(), FunctionalCategory):
+        # full tree completed.
+        break
+
+      direction = tree_node.categ().dir()
+      left_edge, right_edge = span
+
       tree_tokens = tree_node._token
       if isinstance(tree_tokens, str):
         tree_tokens = [tree_tokens]
 
-      # fetch leaf node to be merged with the accumulated tree
-      arg_leaf = leaves[arg]
-
+      # fetch leaf node to be merged next, and prepare various infos
       if direction.is_forward():
+        arg_leaf = leaves[right_edge + 1]
+        span = (left_edge, right_edge + 1)
+
         op = ">"
         children = [tree, arg_leaf]
-        tokens = tree_tokens + [arg_entry._token]
+        tokens = tree_tokens + [arg_leaf.label()[0]._token]
       else:
+        arg_leaf = leaves[left_edge - 1]
+        span = (left_edge - 1, right_edge)
+
         op = "<"
         children = [arg_leaf, tree]
-        tokens = [arg_entry._token] + tree_tokens
+        tokens = [arg_leaf.label()[0]._token] + tree_tokens
 
-      # Walk back up the zipper to produce the constituent's syntactic type.
-      node_syntax = PrimitiveCategory(arg_zipper[0][0])
-      for zip_arg_syntax, zip_dir, _ in arg_zipper[1:]:
-        node_syntax = FunctionalCategory(node_syntax, zip_arg_syntax, Direction(zip_dir, []))
+      node_syntax = tree_node.categ().res()
 
       # Node semantics: simple function application.
       node_semantics = l.ApplicationExpression(
-          tree_node.semantics(), arg_entry.semantics()).simplify()
+          tree_node.semantics(), arg_leaf.label()[0].semantics()).simplify()
 
       lhs = (Token(tokens, node_syntax, node_semantics), op)
       tree = Tree(lhs, children)

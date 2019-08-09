@@ -595,5 +595,14 @@ def test_sample_sentence():
   black => N {bar}
   """, ontology=ontology, include_semantics=True)
 
-  tree = lex.sample_sentence([l.Expression.fromstring("foo"), l.Expression.fromstring("bar")])
-  printCCGDerivation(tree)
+  dist, trees = lex.sample_sentence(
+      {l.Expression.fromstring("foo"), l.Expression.fromstring("bar")},
+      return_dist=True)
+
+  for i, tree in enumerate(trees):
+    print(dist[i])
+    printCCGDerivation(tree)
+    print()
+
+  eq_(set(" ".join(tree.label()[0]._token) for tree in trees),
+      {"black beats blue", "blue beats black"})
