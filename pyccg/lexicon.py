@@ -564,17 +564,24 @@ class Lexicon(ccg_lexicon.CCGLexicon):
       prior_arg_orders = list(itertools.permutations(list(range(1, len(arguments) + 1))))
       arg_orders = []
       for arg_order in prior_arg_orders:
+        ok = True
         for arg1, arg2 in zip(arg_order, arg_order[1:]):
           # arg1 > arg2 in syntactic depth, so require that arg1 >= arg2 in
           # semantic depth
           if not semantic_depths[arg1] >= semantic_depths[arg2]:
-            continue
+            ok = False
 
-        arg_orders.append(arg_order)
+        if ok:
+          arg_orders.append(arg_order)
 
       # TODO weights here .. ?
       arg_orders = Distribution.uniform(arg_orders)
       for arg_order in arg_orders:
+        # Create a binding expression for this argument order.
+        expr = relation
+        for arg_idx in arg_order[::-1]:
+          expr = l.LambdaExpression(idx_to_arg[arg_idx], expr)
+
         for arg_entry_comb in itertools.product(*arg_entries):
           # Search for possible syntactic categories of the lexicalized relation
           # given the arguments.
@@ -591,36 +598,31 @@ class Lexicon(ccg_lexicon.CCGLexicon):
             raise ValueError("cannot handle more than 2-ary arguments at the moment.")
           search_category = self.parse_category(search_category)
 
-          # Sample a relation entry with the required category.
-          relation_entries = self.get_entries_with_category(search_category)
-          # TODO weighted sampling
-          relation_entries = Distribution.uniform(relation_entries)
+          custom_entry = Token("XXX", search_category, expr)
 
-          for relation_entry in relation_entries:
-            # Now compose a tree bottom-up, ordering the arguments according to
-            # `arg_order`.
-            tree = self._build_sentence_tree(
-                relation_entry,
-                [arg_entry_comb[idx - 1] for idx in arg_order])
+          # Now compose a tree bottom-up, ordering the arguments according to
+          # `arg_order`.
+          tree = self._build_sentence_tree(
+              custom_entry,
+              [arg_entry_comb[idx - 1] for idx in arg_order])
 
-            # collect likelihood elements
-            component_ps = [relations[relation],
-                            arg_orders[arg_order],
-                            relation_entries[relation_entry]]
-            component_ps += [arg_i_entries[arg_entry]
-                             for arg_i_entries, arg_entry
-                             in zip(arg_entries, arg_entry_comb)]
-            logp = sum(np.log(p) for p in component_ps)
+          # collect likelihood elements
+          component_ps = [relations[relation],
+                          arg_orders[arg_order]]
+          component_ps += [arg_i_entries[arg_entry]
+                            for arg_i_entries, arg_entry
+                            in zip(arg_entries, arg_entry_comb)]
+          logp = sum(np.log(p) for p in component_ps)
 
-            ret[len(ret_trees)] = logp
-            ret_trees.append(tree)
+          ret[len(ret_trees)] = logp
+          ret_trees.append(tree)
 
-      ret = ret.normalize()
-      if return_dist:
-        return ret, ret_trees
+    ret = ret.normalize()
+    if return_dist:
+      return ret, ret_trees
 
-      sample = ret.sample()
-      return ret_trees[sample]
+    sample = ret.sample()
+    return ret_trees[sample]
 
   def _build_sentence_tree(self, verb_entry, argument_entries):
     """

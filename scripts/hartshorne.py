@@ -438,6 +438,11 @@ def eval_model(bootstrap=False, **learner_kwargs):
   arguments = [expected_lexicon.get_entries(word)[0].semantics()
                 for word in ["toy", "girl"]]
   dist, trees = expected_lexicon.sample_sentence(arguments, return_dist=True)
+  for i, tree in enumerate(trees):
+    print(dist[i])
+    printCCGDerivation(tree)
+
+  print("--------- filtering")
   filtered_trees = []
   for i, tree in enumerate(trees):
     if str(tree.label()[0].semantics()) in licensed_exprs:
