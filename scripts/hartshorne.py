@@ -22,6 +22,7 @@ import numpy as np
 from pyccg.lexicon import Lexicon, get_yield, set_yield
 from pyccg.logic import TypeSystem, Ontology, Expression, NegatedExpression
 from pyccg.model import Model
+from pyccg.util import Distribution
 from pyccg.word_learner import WordLearner
 
 logging.basicConfig(level=logging.DEBUG)
@@ -435,26 +436,32 @@ def eval_model(bootstrap=False, **learner_kwargs):
     r"be_about(\z1.female(z1),fear,\z1.toy(z1))",
     r"cause(\z1.toy(z1),become(\z1.female(z1),fear))"
   }
-  arguments = [expected_lexicon.get_entries(word)[0].semantics()
-                for word in ["toy", "girl"]]
-  dist, trees = expected_lexicon.sample_sentence(arguments, return_dist=True)
-  for i, tree in enumerate(trees):
-    print(dist[i])
-    printCCGDerivation(tree)
+  argument_orders = [[expected_lexicon.get_entries(word)[0].semantics()
+                      for word in word_order]
+                     for word_order in [["toy", "girl"], ["girl", "toy"]]]
+  # TODO this wrapping loop should probably be integrated into sample_sentence?
+  dist_all, all_trees, i = Distribution(), [], 0
+  for argument_order in argument_orders:
+    print(argument_order)
+    dist, trees = expected_lexicon.sample_sentence(argument_order, return_dist=True)
+    for j, tree in enumerate(trees):
+      dist_all[i] = dist[j]
+      all_trees.append(tree)
+      i += 1
 
   print("--------- filtering")
   filtered_trees = []
-  for i, tree in enumerate(trees):
+  for i, tree in enumerate(all_trees):
     if str(tree.label()[0].semantics()) in licensed_exprs:
       filtered_trees.append(tree)
     else:
       filtered_trees.append(None)
-      dist.drop((i,))
+      dist_all.drop((i,))
 
-  dist = dist.normalize()
+  dist_all = dist_all.normalize()
   for i, tree in enumerate(filtered_trees):
     if tree is None: continue
-    print(dist[i])
+    print(dist_all[i])
     printCCGDerivation(tree)
 
   #########
