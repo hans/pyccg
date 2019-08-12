@@ -605,4 +605,4 @@ def test_sample_sentence():
     print()
 
   eq_(set(" ".join(tree.label()[0]._token) for tree in trees),
-      {"black beats blue", "blue beats black"})
+      {"black XXX blue", "blue XXX black"})
