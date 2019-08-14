@@ -612,7 +612,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
           component_ps += [arg_i_entries[arg_entry]
                             for arg_i_entries, arg_entry
                             in zip(arg_entries, arg_entry_comb)]
-          logp = sum(np.log(p) for p in component_ps)
+          logp = np.exp(sum(np.log(p) for p in component_ps))
 
           ret[len(ret_trees)] = logp
           ret_trees.append(tree)

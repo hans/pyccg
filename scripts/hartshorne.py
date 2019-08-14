@@ -442,7 +442,6 @@ def eval_model(bootstrap=False, **learner_kwargs):
   # TODO this wrapping loop should probably be integrated into sample_sentence?
   dist_all, all_trees, i = Distribution(), [], 0
   for argument_order in argument_orders:
-    print(argument_order)
     dist, trees = expected_lexicon.sample_sentence(argument_order, return_dist=True)
     for j, tree in enumerate(trees):
       dist_all[i] = dist[j]
