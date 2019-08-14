@@ -436,31 +436,24 @@ def eval_model(bootstrap=False, **learner_kwargs):
     r"be_about(\z1.female(z1),fear,\z1.toy(z1))",
     r"cause(\z1.toy(z1),become(\z1.female(z1),fear))"
   }
-  argument_orders = [[expected_lexicon.get_entries(word)[0].semantics()
-                      for word in word_order]
-                     for word_order in [["toy", "girl"], ["girl", "toy"]]]
-  # TODO this wrapping loop should probably be integrated into sample_sentence?
-  dist_all, all_trees, i = Distribution(), [], 0
-  for argument_order in argument_orders:
-    dist, trees = expected_lexicon.sample_sentence(argument_order, return_dist=True)
-    for j, tree in enumerate(trees):
-      dist_all[i] = dist[j]
-      all_trees.append(tree)
-      i += 1
+  arguments = set(expected_lexicon.get_entries(word)[0].semantics()
+                  for word in ["toy", "girl"])
+  dist, trees = expected_lexicon.sample_sentence(arguments, return_dist=True)
 
   print("--------- filtering")
   filtered_trees = []
-  for i, tree in enumerate(all_trees):
+  for i, tree in enumerate(trees):
     if str(tree.label()[0].semantics()) in licensed_exprs:
       filtered_trees.append(tree)
     else:
       filtered_trees.append(None)
-      dist_all.drop((i,))
+      dist.drop((i,))
+  # filtered_trees = trees
 
-  dist_all = dist_all.normalize()
+  dist = dist.normalize()
   for i, tree in enumerate(filtered_trees):
     if tree is None: continue
-    print(dist_all[i])
+    print(dist[i])
     printCCGDerivation(tree)
 
   #########

@@ -513,8 +513,13 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     ret = Distribution()
     ret_trees = []
 
-    # necessary to impose arbitrary reference order on the `arguments`
-    # collection -- we'll iterate over all orderings eventually
+    # impose arbitrary reference order on the `arguments` set.
+    #
+    # we'll iterate over the product of two permutations:
+    #
+    # 1. the ordering of the relation's arguments, and
+    # 2. the ordering of the actual arguments (w.r.t. the reference order) when
+    #    applied to the relation
     arguments = tuple(arguments)
 
     if relation is None:
@@ -574,6 +579,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
         if ok:
           arg_orders.append(arg_order)
 
+      # Enumerate possible orderings of argument binding.
       # TODO weights here .. ?
       arg_orders = Distribution.uniform(arg_orders)
       for arg_order in arg_orders:
@@ -600,22 +606,24 @@ class Lexicon(ccg_lexicon.CCGLexicon):
 
           custom_entry = Token("XXX", search_category, expr)
 
-          # Now compose a tree bottom-up, ordering the arguments according to
-          # `arg_order`.
-          tree = self._build_sentence_tree(
-              custom_entry,
-              [arg_entry_comb[idx - 1] for idx in arg_order])
+          # Enumerate possible assignments of arguments to positions.
+          for arg_entry_perm in itertools.permutations(arg_entry_comb):
+            # Now compose a tree bottom-up, ordering the arguments according to
+            # `arg_order`.
+            tree = self._build_sentence_tree(
+                custom_entry,
+                arg_entry_perm)
 
-          # collect likelihood elements
-          component_ps = [relations[relation],
-                          arg_orders[arg_order]]
-          component_ps += [arg_i_entries[arg_entry]
-                            for arg_i_entries, arg_entry
-                            in zip(arg_entries, arg_entry_comb)]
-          logp = np.exp(sum(np.log(p) for p in component_ps))
+            # collect likelihood elements
+            component_ps = [relations[relation],
+                            arg_orders[arg_order]]
+            component_ps += [arg_i_entries[arg_entry]
+                              for arg_i_entries, arg_entry
+                              in zip(arg_entries, arg_entry_comb)]
+            logp = np.exp(sum(np.log(p) for p in component_ps))
 
-          ret[len(ret_trees)] = logp
-          ret_trees.append(tree)
+            ret[len(ret_trees)] = logp
+            ret_trees.append(tree)
 
     ret = ret.normalize()
     if return_dist:
