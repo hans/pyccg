@@ -89,7 +89,7 @@ def test_get_expr_arity():
 
   cases = [
       (r"\x.x", 1, None),
-      (r"x", 0, None),
+      (r"baz", 0, None),
       (r"\z3 z2.foo(z2(\z1.z3(z1)))", 2, None),
       # fully applied 1-arg bound function; type not specified
       (r"\z3 z2.z2(z3)", 2, None),
@@ -485,6 +485,7 @@ def test_iter_application_splits():
   ontology = _make_mock_ontology()
   cases = [
     (r"unique(\a.and_(cube(a),sphere(a)))",
+      None,
       {(r"\z1.unique(\a.z1(cube,sphere,a))", r"\z1 z2 z3.and_(z1(z3),z2(z3))", "/"),},
       {
         # should not yield exprs which don't use their bound variables
@@ -492,6 +493,7 @@ def test_iter_application_splits():
       }),
 
     (r"\z1.unique(z1(and_))",
+      None,
       {},
       {
         # should not shadow existing bound variables
@@ -499,6 +501,7 @@ def test_iter_application_splits():
       }),
 
     (r"cube(a)",
+      {"a": ontology.types["obj"]},
       {
         # should produce unary no-op splits
         (r"\z1.z1", r"cube(a)", "/"),
@@ -507,8 +510,10 @@ def test_iter_application_splits():
       {}),
   ]
 
-  def do_test(expression, expected_members, expected_non_members):
+  def do_test(expression, type_signature, expected_members, expected_non_members):
     expr = Expression.fromstring(expression)
+    ontology.typecheck(expr, extra_type_signature=type_signature)
+
     split_tuples = []
     # iterating with for-loop so that we can catch incremental yields -- easier
     # to debug
@@ -535,8 +540,8 @@ def test_iter_application_splits():
         # full split specified
         ok_(el not in split_tuples, el)
 
-  for expr, expected, expected_not in cases:
-    yield do_test, expr, expected, expected_not
+  for expr, type_signature, expected, expected_not in cases:
+    yield do_test, expr, type_signature, expected, expected_not
 
 
 def test_iter_application_splits_complete():
