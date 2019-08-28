@@ -88,17 +88,24 @@ def test_get_expr_arity():
   ont = _make_simple_mock_ontology()
 
   cases = [
-      (r"\x.x", 1),
-      (r"x", 0),
-      (r"\z3 z2.foo(z2(\z1.z3(z1)))", 2),
+      (r"\x.x", 1, None),
+      (r"x", 0, None),
+      (r"\z3 z2.foo(z2(\z1.z3(z1)))", 2, None),
+      # fully applied 1-arg bound function; type not specified
+      (r"\z3 z2.z2(z3)", 2, None),
+      # fully applied 1-arg bound function
+      (r"\z3 z2.z2(z3)", 2, {"z2": ont.types["boolean", "boolean"]}),
+      # partially applied 2-arg bound function
+      (r"\z3 z2.z2(z3)", 3, {"z2": ont.types["boolean", "boolean", "boolean"]}),
   ]
 
-  def do_case(expr, expected):
+  def do_case(expr, expected, type_sig):
     expr = Expression.fromstring(expr)
+    ont.typecheck(expr, extra_type_signature=type_sig)
     eq_(ont.get_expr_arity(expr), expected)
 
-  for expr, expected in cases:
-    yield do_case, expr, expected
+  for expr, expected, type_sig in cases:
+    yield do_case, expr, expected, type_sig
 
 
 def test_extract_lambda():

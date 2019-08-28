@@ -2555,7 +2555,7 @@ class Ontology(object):
             yield candidate
 
   def typecheck(self, expr, extra_type_signature=None):
-    type_signature = self._nltk_type_signature
+    type_signature = self._make_nltk_type_signature()
     if extra_type_signature is not None:
       type_signature = copy(type_signature)
       type_signature.update(extra_type_signature)
@@ -2564,6 +2564,16 @@ class Ontology(object):
     # TODO assumes variable names are unique
     for variable in expr.bound():
       var_type = self.infer_type(expr, variable.name)
+      if variable.name in type_signature:
+        if var_type.matches(type_signature[variable.name]):
+          # We're good -- inferred type matches prescribed type. Keep the more
+          # specific inferred type.
+          continue
+        else:
+          # Inferred type does not match prescribed type.
+          variable.type = var_type
+          raise TypeResolutionException(variable, type_signature[variable.name])
+
       variable.type = var_type
       type_signature[variable.name] = var_type
 
@@ -2659,15 +2669,24 @@ class Ontology(object):
       fn.arg_types for fn in self.functions))
     return obs_types - set([self.types.ANY_TYPE])
 
-  def get_expr_arity(self, expr):
+  def get_expr_arity(self, expr, other_types=None):
     """
     Get the arity (number of bound variables) of a function definition.
     """
+    if other_types is None:
+      other_types = {}
+
     if isinstance(expr, LambdaExpression):
-      return 1 + self.get_expr_arity(expr.term)
+      other_types[expr.variable.name] = expr.variable.type
+      return 1 + self.get_expr_arity(expr.term, other_types)
     elif isinstance(expr, ApplicationExpression):
-      function = self.functions_dict[expr.pred.variable.name]
-      return function.arity - len(expr.args)
+      name = expr.pred.variable.name
+      if name in other_types:
+        arity = len(other_types[name].flat) - 1
+      else:
+        arity = self.functions_dict[expr.pred.variable.name].arity
+
+      return arity - len(expr.args)
     elif isinstance(expr, (IndividualVariableExpression, ConstantExpression)) \
         and expr.variable.name in self.functions_dict:
       return self.functions_dict[expr.variable.name].arity
