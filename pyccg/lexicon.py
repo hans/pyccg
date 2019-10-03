@@ -201,7 +201,7 @@ class Lexicon(ccg_lexicon.CCGLexicon):
     prune_count = 0
     for token in self._entries:
       entries_t = [token for token in self._entries[token] if token.weight() > 0]
-      entries_t = sorted(entries_t, key=lambda t: t.weight())[:max_entries]
+      entries_t = sorted(entries_t, reverse=True, key=lambda t: t.weight())[:max_entries]
       prune_count += len(self._entries[token]) - len(entries_t)
       self._entries[token] = entries_t
 
