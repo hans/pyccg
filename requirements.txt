@@ -1,6 +1,6 @@
 numpy>=1.13
 matplotlib>=2.2
-nltk==3.4
+nltk==3.4.5
 nose
 coverage
 frozendict
